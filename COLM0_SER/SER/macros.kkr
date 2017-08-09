@@ -1,0 +1,35 @@
+#ifndef MACROS
+#define MACROS
+
+/*Types and names*/
+
+#define CRYPTO_KEYBYTES 16
+#define CRYPTO_ABYTES 16
+#define PARA 8 /* Portability*/
+
+/*Simple operations*/
+
+#define ENC(pt12,key123) _mm_aesenc_si128(pt12,key123) 
+#define ENCLAST(pt12,key123) _mm_aesenclast_si128(pt12,key123)
+	
+#define ENCRYPTPARA(pt)\
+	for(j=0;j<PARA;++j){\
+		pt[j] = _mm_xor_si128(pt[j],enc_keys[0]);\
+	}\
+	for(j=1;j<10;++j){\
+		pt[0] = ENC(pt[0],enc_keys[j]);\
+		pt[1] = ENC(pt[1],enc_keys[j]);\
+		pt[2] = ENC(pt[2],enc_keys[j]);\
+		pt[3] = ENC(pt[3],enc_keys[j]);\
+		pt[4] = ENC(pt[4],enc_keys[j]);\
+		pt[5] = ENC(pt[5],enc_keys[j]);\
+		pt[6] = ENC(pt[6],enc_keys[j]);\
+		pt[7] = ENC(pt[7],enc_keys[j]);\
+	}\
+	for(j=0;j<PARA;++j){\
+		pt[j] = ENCLAST(pt[j],enc_keys[10]);\
+	}
+		
+	
+
+#endif /*MACROS*/
