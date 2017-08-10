@@ -6,6 +6,8 @@
 #include "auxfuncs.h"
 #include <stdbool.h>
 
+#define PARA 4
+
 // const unsigned char zero[CRYPTO_KEYBYTES] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 // const unsigned char param[CRYPTO_NPUBBYTES] = {0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00};
 
@@ -42,10 +44,7 @@ int crypto_aead_encrypt( // Requires plaintext of length n*8*16 + 16
 	__m128i L2 = _mm_xor_si128(L1,mul2(L1)); 
 
 	unsigned char Aa[CRYPTO_KEYBYTES]; // = malloc(CRYPTO_KEYBYTES); 
-	if(pad_ad)
-	{
-		
-	}
+	int i,j;
 	__m128i Wp,AA,Z;
 	unsigned char Ai_t[CRYPTO_KEYBYTES]; // = malloc(CRYPTO_KEYBYTES);
 	__m128i Ai;
@@ -56,8 +55,19 @@ int crypto_aead_encrypt( // Requires plaintext of length n*8*16 + 16
 	__m128i delta = L1;
 	__m128i nonceparam = _mm_set_epi64(nonce,param);
 	Wp = encrypt_block( _mm_xor_si128( nonceparam,delta )); 
-	int upper = numblocks_ad-1; 
-	for(int i=0;i<upper;i+=4) 
+	int upper = numblocks_ad; 
+
+	if(!fin_ad){
+		--upper;
+	}
+	
+	int sin =1;
+	int fin_encr=upper%PARA;
+	if(!fin_encr){
+		sin=0;
+	}
+	
+	for(i=0;i<(upper-PARA*sin);i+=PARA) 
 	{
 		a_delta[0] = mul2(a_delta[3]); 
 		a_delta[1] = mul2(a_delta[0]); 
@@ -74,8 +84,16 @@ int crypto_aead_encrypt( // Requires plaintext of length n*8*16 + 16
 		a_Ai[2] = _mm_xor_si128( a_Ai[2],a_delta[2] );
 		a_Ai[3] = _mm_xor_si128( a_Ai[3],a_delta[3] );
 		
-		encrypt_4block(a_Ai); // TODO: Parallel
+		encrypt_4block(a_Ai); 
 		Wp = Wp^a_Ai[0]^a_Ai[1]^a_Ai[2]^a_Ai[3];
+	}
+
+	for(i=0;i<fin_encr;++i){
+		a_delta[PARA-1] = mul2(a_delta[PARA-1]);
+		a_Ai[0] = _mm_loadu_si128(ad+(i+upper-fin_encr)*CRYPTO_KEYBYTES);
+		a_Ai[0] = _mm_xor_si128(a_Ai[0],a_delta[PARA-1]);
+		a_Ai[0] = encrypt_block(a_Ai[0]);
+		Wp = Wp^a_Ai[0];
 	}
 	
 	if(pad_ad)
@@ -95,16 +113,19 @@ int crypto_aead_encrypt( // Requires plaintext of length n*8*16 + 16
 	AA = _mm_xor_si128( Ai,delta );
 	Z = encrypt_block(AA);
 	IV = _mm_xor_si128( Z,Wp );
-
+	printf("IV = ");print128_asint(IV);
+	
 	// Encryption
 	upper = numblocks_mes-1;
-	unsigned char M_star[CRYPTO_KEYBYTES]; // = malloc(CRYPTO_KEYBYTES); // TODO: Check redundancy
+	int mf = numblocks_mes-1;
+	unsigned char M_star[CRYPTO_KEYBYTES]; 
 	if(pad_mes)
 	{
 		memcpy(M_star, m+(numblocks_mes*CRYPTO_KEYBYTES), fin_mes);
 		M_star[fin_mes] = 0x80;
 		memset(M_star+fin_mes+1,0,CRYPTO_KEYBYTES-(fin_mes+1));
 		++numblocks_mes;
+		++mf;
 	}
 	else
 	{
@@ -116,8 +137,6 @@ int crypto_aead_encrypt( // Requires plaintext of length n*8*16 + 16
 	__m128i Ml;
 	unsigned char Mi_t[CRYPTO_KEYBYTES]; // = malloc(CRYPTO_KEYBYTES);
 	unsigned char ctb[CRYPTO_KEYBYTES]; // = malloc(CRYPTO_KEYBYTES);
-	upper = numblocks_mes-1; // l-1 
-	// if(!pad_mes) // TODO: Optimize
 	
 	Ml = _mm_loadu_si128(M_star);
 	
@@ -135,24 +154,24 @@ int crypto_aead_encrypt( // Requires plaintext of length n*8*16 + 16
 	int hi = 0;
 	int h = upper/127;
 	int tags = (numblocks_mes/127);
-	__m128i *T = malloc(tags*sizeof(__m128i)); // I know that malloc can be evil, and the number of tags can precomputed knowing the size of the plaintext (see and compile countchars.c), but I'll leave it here for now.
+	__m128i *T = malloc(tags*sizeof(__m128i)); 
 	bool n = false;
 	__m128i Mg[4];
-	/* __m128i Xg[8];
-	__m128i Cg[8];
-	__m128i Yg[8]; // */
-	int i,j;
-	// upper /= 8;
-	for(i=0;i<upper;i+=4) // i=1 -> i=l-1
+	
+	int ij;
+	sin =1;
+	fin_encr=mf%4;
+	if(!fin_encr){
+		sin=0;
+	}
+	
+	for(i=0;i<(mf-sin*4);i+=4) // i=1 -> i=l-1
 	{
 			Mg[0] = _mm_loadu_si128(m+(i+0)*CRYPTO_KEYBYTES);
 			Mg[1] = _mm_loadu_si128(m+(i+1)*CRYPTO_KEYBYTES);
 			Mg[2] = _mm_loadu_si128(m+(i+2)*CRYPTO_KEYBYTES);
 			Mg[3] = _mm_loadu_si128(m+(i+3)*CRYPTO_KEYBYTES);
-			/*Mg[4] = _mm_loadu_si128(m+(i*8+4)*CRYPTO_KEYBYTES);
-			Mg[5] = _mm_loadu_si128(m+(i*8+5)*CRYPTO_KEYBYTES);
-			Mg[6] = _mm_loadu_si128(m+(i*8+6)*CRYPTO_KEYBYTES);
-			Mg[7] = _mm_loadu_si128(m+(i*8+7)*CRYPTO_KEYBYTES);*/
+			
 			
 			Ml = Ml^Mg[0]^Mg[1]^Mg[2]^Mg[3]; //  _mm_xor_si128( M,Ml );
 			
@@ -169,18 +188,7 @@ int crypto_aead_encrypt( // Requires plaintext of length n*8*16 + 16
 		
 		encrypt_4block(Mg); // See COLM_0 encrypt.c for how to change back to multi array
 		
-		/*
-		_2W = mul2(W);
-		// X = Xg[j];
-		Y = _mm_xor_si128( X,  _mm_xor_si128(W,_2W) ); 
-		W = _mm_xor_si128( X,  _2W ); 
-		if((i)%127 == 126) 
-		{
-			TT = encrypt_block(W);
-			n = true;
-		}
-		CC = encrypt_block(Y);
-		*/
+		
 		
 		for(j=0;j<4;++j)
 		{
@@ -195,19 +203,8 @@ int crypto_aead_encrypt( // Requires plaintext of length n*8*16 + 16
 			}
 		}
 		
-		encrypt_4block(Mg/*,Cg*/); // CC
-		/*
-		deltaC = mul2(deltaC);
-		if(n && (i)%127==0)
-		{
-			T[hi] = _mm_xor_si128(deltaC,TT);
-			deltaC = mul2(deltaC);
-			++hi;
-			n = false;
-		}
-		C = _mm_xor_si128(CC,deltaC);
-		_mm_storeu_si128( (__m128i *)&c[i*CRYPTO_KEYBYTES], C );
-		*/
+		encrypt_4block(Mg); // CC
+		
 		
 		for(j=0;j<4;++j)
 		{
@@ -219,9 +216,47 @@ int crypto_aead_encrypt( // Requires plaintext of length n*8*16 + 16
 				++hi;
 				n = false;
 			}
+			
 			C = _mm_xor_si128(Mg[j],deltaC);
+			
 			_mm_storeu_si128( (__m128i *)&c[(i+j)*CRYPTO_KEYBYTES], C ); 
+			ij = i+j;
 		}
+	}
+	
+	ij = ij%127;
+	for(i=0;i<fin_encr;++i){
+		++ij;
+		a_delta[PARA-1] = mul2(a_delta[PARA-1]);
+		Mg[0] = _mm_loadu_si128(m+((i+mf-fin_encr)*CRYPTO_KEYBYTES));
+		Ml = Mg[0]^Ml;
+		Mg[0] = _mm_xor_si128(Mg[0],a_delta[PARA-1]);
+		
+		Mg[0] = encrypt_block(Mg[0]);
+		
+		Wp = _mm_xor_si128(Mg[0],mul2(W));
+		Mg[0] = _mm_xor_si128(Wp,W);
+		W = Wp;
+		if(ij==126)
+		{
+			TT = encrypt_block(W);
+			n = true;
+		}
+		
+		Mg[0] = encrypt_block(Mg[0]);
+		
+		deltaC = mul2(deltaC);
+		if(n && (ij==0 || ij==127) ){
+			T[hi] = _mm_xor_si128(deltaC,TT);
+			deltaC = mul2(deltaC);
+			++hi;
+			n = false;
+		}
+		
+		C = _mm_xor_si128(Mg[0],deltaC);
+		printf("e .. %d\n",(i+mf-fin_encr)*CRYPTO_KEYBYTES);
+		print128_asint(C);
+		_mm_storeu_si128( (__m128i *)&c[(i+mf-fin_encr)*CRYPTO_KEYBYTES], C );
 	}
 	
 	// Assumption: delta_m independent from h
@@ -321,7 +356,8 @@ int crypto_aead_encrypt( // Requires plaintext of length n*8*16 + 16
 		CC = encrypt_block(Y);
 		
 		C = _mm_xor_si128(CC,deltaC);
-		_mm_storeu_si128( (__m128i *)&c[upper*CRYPTO_KEYBYTES], C ); // Store straight!! beware
+		printf("e .|. %d\n",mf*CRYPTO_KEYBYTES);
+		_mm_storeu_si128( (__m128i *)&c[mf*CRYPTO_KEYBYTES], C ); // Store straight!! beware
 		// memcpy(c+upper*CRYPTO_KEYBYTES,ctb,CRYPTO_KEYBYTES);
 	}
 	
@@ -362,6 +398,7 @@ int crypto_aead_encrypt( // Requires plaintext of length n*8*16 + 16
 	_mm_storeu_si128( (__m128i *)&ctb[0], C ); // Store straight - beware
 	
 	int os = CRYPTO_KEYBYTES - fin_mes;
+	printf("e .//. %d\n",numblocks_mes*CRYPTO_KEYBYTES);
 	memcpy(c+numblocks_mes*CRYPTO_KEYBYTES,ctb,fin_mes);
 	for(int i=1;i<=tags;++i)
 	{

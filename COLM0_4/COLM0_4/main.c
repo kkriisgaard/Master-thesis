@@ -55,20 +55,20 @@ static __inline uint64_t get_Clks(void)
 
 int main(int argc,char *argv[])
 {
-	int j = 0; // REALLY ??
+	int j = 0; 
 	int sz = 0;
-	// unsigned char c;
+	
 	unsigned long long clen; 
 	unsigned long long mlen;
 	int ch;
 	FILE *fp;
-	fp = fopen("infile128.txt","r");
+	fp = fopen("simple-4567.txt","r");
 	if(fp==NULL){printf("Couldn't open file. Terminating\n");return 0;}
 	fseek(fp, 0L, SEEK_END);
 	sz = ftell(fp);
 	rewind(fp);
 	unsigned char *test = malloc(sz); 
-		
+	printf("sz = %d\n",sz);
 	while ( j<sz) 
 	{
 		ch = fgetc(fp);
@@ -84,26 +84,22 @@ int main(int argc,char *argv[])
 	unsigned char *ct = malloc(mlen + CRYPTO_ABYTES);
 
 	unsigned char ad[144] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-	/*printf("Address of ad+128 is: %llu\n",ad+128);
-	printf("Address of key is: %llu\n",key);
-	printf("Address of message is: %llu\n",test);*/
+	
 	const unsigned char nonce[CRYPTO_NPUBBYTES] = {0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0xE2};
 
 	//printf("Encryption happens here\n");
-	FILE *resdump;
+	/*FILE *resdump;
 	resdump = fopen("COLM-Skylake-128-4.txt","w");
 	for(int y=0;y<1000;++y)
 	{
 		TIME_IT("COLM0-Pipe",crypto_aead_encrypt(ct,&clen,test,mlen,ad,144,0,nonce,key),mlen,1); 
-	} // */
-	fclose(resdump);
+	} // 
+	fclose(resdump);*/
 	
 	// TIME_IT("COLM0-Pipe",crypto_aead_encrypt(ct,&clen,test,mlen,ad,144,0,nonce,key),mlen,1); 
-	// crypto_aead_encrypt(ct,&clen,test,mlen,ad,144,0,nonce,key);
+	crypto_aead_encrypt(ct,&clen,test,mlen,ad,144,0,nonce,key);
 	FILE *out = fopen("outfile.txt","w");
-	// ct[81] = 'e';
-	// printf("\nmlen = %d\nclen = %d\n",mlen,clen);
-	// printf("\nCiphertext:\n");
+
 	for(int i=0;i<clen;++i)
 	{
 		fprintf(out,"%c",ct[i]);
@@ -124,10 +120,9 @@ int main(int argc,char *argv[])
 		cip[j] = (unsigned char)ch;
 		++j;
 	}
-	// printf("\n Decrypting now: \n");
-	// printf("Address of key is: %llu\n",key);
+
 	int dec_status = crypto_aead_decrypt(pt,&mlen,0,cip,clen,ad,144,nonce,key); // */
-	// printf("\nPlaintext of length %d:\n",mlen);
+
 	if(!dec_status || DEBUG) // Legacy print statement from testing
 	{
 		// printf("dec_status = %d\n",dec_status); // 

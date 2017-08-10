@@ -55,14 +55,14 @@ static __inline uint64_t get_Clks(void)
 
 int main(int argc,char *argv[])
 {
-	int j = 0; // REALLY ??
+	int j = 0; 
 	int sz = 0;
 	// unsigned char c;
 	unsigned long long clen; 
 	unsigned long long mlen;
 	int ch;
 	FILE *fp;
-	fp = fopen("infile128.txt","r");
+	fp = fopen("simple-165.txt","r");
 	if(fp==NULL){printf("Couldn't open file. Terminating\n");return 0;}
 	fseek(fp, 0L, SEEK_END);
 	sz = ftell(fp);
@@ -90,16 +90,16 @@ int main(int argc,char *argv[])
 	const unsigned char nonce[CRYPTO_NPUBBYTES] = {0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0xE2};
 
 	//printf("Encryption happens here\n");
-	FILE *resdump;
+	/*FILE *resdump;
 	resdump = fopen("COLM-Skylake-128-4.txt","w");
 	for(int y=0;y<1000;++y)
 	{
 		TIME_IT("COLM0-Pipe",crypto_aead_encrypt(ct,&clen,test,mlen,ad,144,0,nonce,key),mlen,1); 
-	} // */
-	fclose(resdump);
+	} 
+	fclose(resdump);// */
 	
 	// TIME_IT("COLM0-Pipe",crypto_aead_encrypt(ct,&clen,test,mlen,ad,144,0,nonce,key),mlen,1); 
-	// crypto_aead_encrypt(ct,&clen,test,mlen,ad,144,0,nonce,key);
+	crypto_aead_encrypt(ct,&clen,test,mlen,ad,144,0,nonce,key);
 	FILE *out = fopen("outfile.txt","w");
 	// ct[81] = 'e';
 	// printf("\nmlen = %d\nclen = %d\n",mlen,clen);
@@ -130,7 +130,7 @@ int main(int argc,char *argv[])
 	// printf("\nPlaintext of length %d:\n",mlen);
 	if(!dec_status || DEBUG) // Legacy print statement from testing
 	{
-		// printf("dec_status = %d\n",dec_status); // 
+		printf("dec_status = %d\n",dec_status); // 
 		for(int i=0;i<mlen;++i)
 		{
 			printf("%c",pt[i]);

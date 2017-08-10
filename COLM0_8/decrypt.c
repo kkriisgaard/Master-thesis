@@ -5,7 +5,7 @@
 #include "crypto_aead.h"
 #include "auxfuncs.h"
 #include <stdbool.h>
-// #include "debugfuncs.h"
+#include "debugfuncs.h"
 
 __m128i dec_keys[20];
 
@@ -56,8 +56,7 @@ void decrypt_8block2(__m128i* in)
 	in[5] = _mm_xor_si128(in[5],dec_keys[10]);
 	in[6] = _mm_xor_si128(in[6],dec_keys[10]);
 	in[7] = _mm_xor_si128(in[7],dec_keys[10]);
-	// print128_asint(in[1]);
-
+	
 	in[0] = _mm_aesdec_si128(in[0],dec_keys[11]);
 	in[1] = _mm_aesdec_si128(in[1],dec_keys[11]);
 	in[2] = _mm_aesdec_si128(in[2],dec_keys[11]);
@@ -66,7 +65,6 @@ void decrypt_8block2(__m128i* in)
 	in[5] = _mm_aesdec_si128(in[5],dec_keys[11]);
 	in[6] = _mm_aesdec_si128(in[6],dec_keys[11]);
 	in[7] = _mm_aesdec_si128(in[7],dec_keys[11]);
-	// print128_asint(in[1]);
 	
 	in[0] = _mm_aesdec_si128(in[0],dec_keys[12]);
 	in[1] = _mm_aesdec_si128(in[1],dec_keys[12]);
@@ -76,7 +74,6 @@ void decrypt_8block2(__m128i* in)
 	in[5] = _mm_aesdec_si128(in[5],dec_keys[12]);
 	in[6] = _mm_aesdec_si128(in[6],dec_keys[12]);
 	in[7] = _mm_aesdec_si128(in[7],dec_keys[12]);
-	// print128_asint(in[1]);
 	
 	in[0] = _mm_aesdec_si128(in[0],dec_keys[13]);
 	in[1] = _mm_aesdec_si128(in[1],dec_keys[13]);
@@ -86,8 +83,7 @@ void decrypt_8block2(__m128i* in)
 	in[5] = _mm_aesdec_si128(in[5],dec_keys[13]);
 	in[6] = _mm_aesdec_si128(in[6],dec_keys[13]);
 	in[7] = _mm_aesdec_si128(in[7],dec_keys[13]);
-	// print128_asint(in[1]);
-
+	
 	in[0] = _mm_aesdec_si128(in[0],dec_keys[14]);
 	in[1] = _mm_aesdec_si128(in[1],dec_keys[14]);
 	in[2] = _mm_aesdec_si128(in[2],dec_keys[14]);
@@ -96,7 +92,6 @@ void decrypt_8block2(__m128i* in)
 	in[5] = _mm_aesdec_si128(in[5],dec_keys[14]);
 	in[6] = _mm_aesdec_si128(in[6],dec_keys[14]);
 	in[7] = _mm_aesdec_si128(in[7],dec_keys[14]);
-	// print128_asint(in[1]);
 	
 	in[0] = _mm_aesdec_si128(in[0],dec_keys[15]);
 	in[1] = _mm_aesdec_si128(in[1],dec_keys[15]);
@@ -106,7 +101,6 @@ void decrypt_8block2(__m128i* in)
 	in[5] = _mm_aesdec_si128(in[5],dec_keys[15]);
 	in[6] = _mm_aesdec_si128(in[6],dec_keys[15]);
 	in[7] = _mm_aesdec_si128(in[7],dec_keys[15]);
-	// print128_asint(in[1]);
 	
 	in[0] = _mm_aesdec_si128(in[0],dec_keys[16]);
 	in[1] = _mm_aesdec_si128(in[1],dec_keys[16]);
@@ -116,8 +110,7 @@ void decrypt_8block2(__m128i* in)
 	in[5] = _mm_aesdec_si128(in[5],dec_keys[16]);
 	in[6] = _mm_aesdec_si128(in[6],dec_keys[16]);
 	in[7] = _mm_aesdec_si128(in[7],dec_keys[16]);
-	// print128_asint(in[1]);
-
+	
 	in[0] = _mm_aesdec_si128(in[0],dec_keys[17]);
 	in[1] = _mm_aesdec_si128(in[1],dec_keys[17]);
 	in[2] = _mm_aesdec_si128(in[2],dec_keys[17]);
@@ -126,7 +119,6 @@ void decrypt_8block2(__m128i* in)
 	in[5] = _mm_aesdec_si128(in[5],dec_keys[17]);
 	in[6] = _mm_aesdec_si128(in[6],dec_keys[17]);
 	in[7] = _mm_aesdec_si128(in[7],dec_keys[17]);
-	// print128_asint(in[1]);
 	
 	in[0] = _mm_aesdec_si128(in[0],dec_keys[18]);
 	in[1] = _mm_aesdec_si128(in[1],dec_keys[18]);
@@ -136,7 +128,6 @@ void decrypt_8block2(__m128i* in)
 	in[5] = _mm_aesdec_si128(in[5],dec_keys[18]);
 	in[6] = _mm_aesdec_si128(in[6],dec_keys[18]);
 	in[7] = _mm_aesdec_si128(in[7],dec_keys[18]);
-	// print128_asint(in[1]);
 	
 	in[0] = _mm_aesdec_si128(in[0],dec_keys[19]);
 	in[1] = _mm_aesdec_si128(in[1],dec_keys[19]);
@@ -146,8 +137,7 @@ void decrypt_8block2(__m128i* in)
 	in[5] = _mm_aesdec_si128(in[5],dec_keys[19]);
 	in[6] = _mm_aesdec_si128(in[6],dec_keys[19]);
 	in[7] = _mm_aesdec_si128(in[7],dec_keys[19]);
-	// print128_asint(in[1]);
-
+	
 	in[0] = _mm_aesdeclast_si128(in[0],dec_keys[0]);
 	in[1] = _mm_aesdeclast_si128(in[1],dec_keys[0]);
 	in[2] = _mm_aesdeclast_si128(in[2],dec_keys[0]);
@@ -156,7 +146,7 @@ void decrypt_8block2(__m128i* in)
 	in[5] = _mm_aesdeclast_si128(in[5],dec_keys[0]);
 	in[6] = _mm_aesdeclast_si128(in[6],dec_keys[0]);
 	in[7] = _mm_aesdeclast_si128(in[7],dec_keys[0]);
-} // */ 
+} 
 
 __m128i encypt_block_d(__m128i pt) 
 {
@@ -260,7 +250,7 @@ int crypto_aead_decrypt(
 	__m128i key = _mm_loadu_si128(k);
 	
 	generate_dec_key(key);
-	
+	int i,j;
 	int fin_cip = clen%CRYPTO_KEYBYTES; 
 	int numblocks_cip = clen/CRYPTO_KEYBYTES;
 	int fin_ad = adlen%CRYPTO_KEYBYTES; // 
@@ -281,10 +271,14 @@ int crypto_aead_decrypt(
 	
 	__m128i nonceparam = _mm_set_epi64(nonce,param); 
 	Wp = encypt_block_d( _mm_xor_si128( nonceparam,delta )); 
-	int upper = numblocks_ad-1; 
+	
+	int upper = numblocks_ad;
+	if(!fin_ad){
+		--upper;
+	}
 	
 	unsigned char Aa[CRYPTO_KEYBYTES]; 
-	for(int i=0;i<upper;++i) // Current case |AD|<8 blocks
+	for(i=0;i<upper;++i) 
 	{
 		delta = mul2(delta); 
 		Ai = _mm_loadu_si128(ad+i*CRYPTO_KEYBYTES); 
@@ -318,9 +312,7 @@ int crypto_aead_decrypt(
 	__m128i C,Y,deltaC,M;
 	__m128i M_star = zero_mes; 
 	__m128i Cg[8]; 
-	/*__m128i Yg[8]; 
-	__m128i Xg[8]; 
-	__m128i Mg[8]; // */ 
+	
 	if(!pad_cip)
 	{
 		--numblocks_cip;
@@ -328,12 +320,18 @@ int crypto_aead_decrypt(
 	}
 	
 	int mf = numblocks_cip-1; 
-	upper = mf/8;
-	int j;
+	
+	int sin =1;
+	int fin_encr=mf%4;
+	if(!fin_encr){
+		sin=0;
+	}
+	
+	
 	deltaC = L2;
 	delta = L;
-	// upper /= 8;
-	for(int i=0;i<upper;++i) 
+	
+	for(i=0;i<(mf-sin*8);i+=8) 
 	{
 		for(j=0;j<8;++j)
 		{
@@ -342,7 +340,7 @@ int crypto_aead_decrypt(
 			Cg[j] = _mm_xor_si128(C,deltaC);
 		}		
 		
-		decrypt_8block2(Cg/*,Yg*/);
+		decrypt_8block2(Cg);
 		
 		for(j=0;j<8;++j) // rho_inv loop
 		{
@@ -351,7 +349,7 @@ int crypto_aead_decrypt(
 			W = _mm_xor_si128( Y,W );
 		}	
 		
-		decrypt_8block2(Cg/*,Mg*/);
+		decrypt_8block2(Cg);
 		for(j=0;j<8;++j)
 		{
 			delta = mul2(delta);
@@ -360,6 +358,26 @@ int crypto_aead_decrypt(
 			_mm_storeu_si128( (__m128i *)&m[(i*8+j)*CRYPTO_KEYBYTES], M ); // Store straight
 			
 		}
+	}
+	
+	for(i=0;i<fin_encr;++i){
+		deltaC = mul2(deltaC);
+		C = _mm_loadu_si128( c+(mf+i-fin_encr)*CRYPTO_KEYBYTES );
+		
+		C = _mm_xor_si128(C,deltaC);
+		
+		C = decrypt_block(C);
+		
+		
+		
+		Y = C;
+		C = _mm_xor_si128( Y, _mm_xor_si128(W,mul2(W) ) )  ;
+		W = _mm_xor_si128( Y,W );
+		C = decrypt_block(C);
+		delta = mul2(delta);
+		M = _mm_xor_si128(C,delta);
+		M_star = _mm_xor_si128(M_star,M);
+		_mm_storeu_si128( (__m128i *)&m[(mf+i-fin_encr)*CRYPTO_KEYBYTES], M );
 	}
 	
 	C = _mm_loadu_si128(c+mf*CRYPTO_KEYBYTES);

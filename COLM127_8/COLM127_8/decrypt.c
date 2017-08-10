@@ -120,6 +120,7 @@ int crypto_aead_decrypt(
 		AA = _mm_xor_si128( Ai,delta );
 		Z = encrypt_block(AA); // TODO: Parallel
 		Wp = _mm_xor_si128( Z,Wp );
+		
 	}
 	
 	if(pad_ad)
@@ -139,7 +140,6 @@ int crypto_aead_decrypt(
 	AA = _mm_xor_si128( Ai,delta );
 	Z = encrypt_block(AA);
 	IV = _mm_xor_si128( Z,Wp );
-	
 	// Decryption
 	
 	__m128i W = IV;
@@ -159,34 +159,40 @@ int crypto_aead_decrypt(
 	int hi=0;
 	deltaC = L2;
 	delta = L;
+
 	__m128i Wj,Wc,Wpj,T,deltaCh;
 	unsigned char T_a[CRYPTO_KEYBYTES];
-	/* __m128i Xg[8];
-	__m128i Mg[8];
-	__m128i Yg[8];// */
+
 	__m128i Cg[8];
 	int i,j;
-	upper = mf/8;
+	// upper = mf/8;
 	bool n = false;
 	int os = CRYPTO_KEYBYTES - fin_cip;
 	
-	for(i=0;i<upper;++i) // i = 1..(l-1)
+	int sin =1;
+	int ij;
+	int fin_encr=mf%8;
+	if(!fin_encr){
+		sin=0;
+	}
+	
+	for(i=0;i<(mf-sin*8);i+=8) // i = 1..(l-1)
 	{
 		for(j=0;j<8;++j)
 		{
 			
 			deltaC = mul2(deltaC); 
-			if((8*i+j)%127==0 && i!=0)
+			if((i+j)%127==0 && i!=0)
 			{
 				deltaCh = deltaC;
 				deltaC = mul2(deltaC);
 			}
-			C = _mm_loadu_si128(c+(i*8+j)*CRYPTO_KEYBYTES);
+			C = _mm_loadu_si128(c+(i+j)*CRYPTO_KEYBYTES);
 			Cg[j] = _mm_xor_si128(C,deltaC);
+			
 		}
 				
-		decrypt_8block2(Cg/*,Yg*/); // For instructions on how to change back to multi array
-					    // See encrypt.c in COLM0
+		decrypt_8block2(Cg); 
 		
 		for(j=0;j<8;++j)
 		{
@@ -195,13 +201,14 @@ int crypto_aead_decrypt(
 			Y = Cg[j];
 			Cg[j] = _mm_xor_si128( Y, _mm_xor_si128(W,_2W ) )  ;
 			W = _mm_xor_si128( Y,W );
-			if((8*i+j)%127==126)
+			if((i+j)%127==126)
 			{
 				Wj = W;
+				n = true;
 				// print128_asint(Wj);
 			}
 			
-			if((8*i+j)%127==0 && i!=0)
+			if((i+j)%127==0 && i!=0)
 			{
 				T = _mm_loadu_si128(c+((numblocks_cip+1+hi)*CRYPTO_KEYBYTES-os));
 				TT = _mm_xor_si128(deltaCh,T);
@@ -220,12 +227,63 @@ int crypto_aead_decrypt(
 		decrypt_8block2(Cg/*,Mg*/);
 		for(j=0;j<8;++j)
 		{
+			
 			delta = mul2(delta);
 			M = _mm_xor_si128(Cg[j],delta);
+			
 			M_star = _mm_xor_si128(M_star,M);
-			_mm_storeu_si128( (__m128i *)&m[(i*8+j)*CRYPTO_KEYBYTES], M );
+			_mm_storeu_si128( (__m128i *)&m[(i+j)*CRYPTO_KEYBYTES], M );
+			ij = i+j;
 		}
 		 
+	}
+	ij = ij%127;
+	for(i=0;i<fin_encr;++i){
+		++ij;
+		deltaC = mul2(deltaC); 
+		if(ij==127)
+		{
+			deltaCh = deltaC;
+			deltaC = mul2(deltaC);
+		}
+		printf(" d.. %d\n",(i+mf-fin_encr)*CRYPTO_KEYBYTES);
+		C = _mm_loadu_si128(c+(i+mf-fin_encr)*CRYPTO_KEYBYTES);
+		
+		C = _mm_xor_si128(C,deltaC);
+		
+		C = decrypt_block(C);
+		
+		_2W = mul2(W);
+		Y = C;
+		C = _mm_xor_si128( Y, _mm_xor_si128(W,_2W ) )  ;
+		W = _mm_xor_si128( Y,W );
+		if(ij==126)
+		{
+			Wj = W;
+			n = true;
+		}
+		if(ij==127)
+		{
+			T = _mm_loadu_si128(c+((numblocks_cip+1+hi)*CRYPTO_KEYBYTES-os));
+			TT = _mm_xor_si128(deltaCh,T);
+			Wpj = decrypt_block(TT);
+			if(!check_int(_mm_xor_si128(Wpj,Wj) ) )
+			{
+				printf("Verification went wrong in the final loop\n");
+				// memset(m,0,*mlen);
+				return -1;
+			}
+			++hi;
+			n = false;
+		}
+		
+		C = decrypt_block(C);
+		printf("C = ");print128_asint(C);
+		delta = mul2(delta);
+		M = _mm_xor_si128(C,delta);
+		M_star = _mm_xor_si128(M_star,M);
+		_mm_storeu_si128( (__m128i *)&m[(i+mf-fin_encr)*CRYPTO_KEYBYTES], M );
+		
 	}
 	
 	
@@ -362,7 +420,7 @@ int crypto_aead_decrypt(
 	if(!good)
 	{
 		// printf("Oh shit!\n");
-		memset(m,0,*mlen); // We don't want a plaintext bouncing around memory
+		// memset(m,0,*mlen); // We don't want a plaintext bouncing around memory
 		return -1;
 	}
 	

@@ -1,8 +1,6 @@
 #include "Skinny128128AVX2.h"
 #include <stdio.h>
 
-/* Code based on https://github.com/kste/skinny_avx */
-
 #if DEBUG
 extern void print256_asint(const u256 in);
 #endif

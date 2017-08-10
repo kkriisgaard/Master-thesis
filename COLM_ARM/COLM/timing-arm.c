@@ -100,6 +100,36 @@ int check_zero(u128 v)
 	return 1;
 }
 
+int check_pad(u128 ver, u128 M_star,int fin)
+{
+	unsigned char c_arr[CRYPTO_KEYBYTES];
+	unsigned char M_arr[CRYPTO_KEYBYTES];
+	STORE(c_arr,ver);
+	STORE(M_arr,M_star);
+	if(M_arr[fin] != 0x80)
+	{
+		// printf("fails 0x80\n");
+		return 0;
+	}
+	for(int i=0;i<fin;++i)
+	{
+		if(c_arr[i] != 0x00)
+		{
+			// printf("fails comparison on iteration in c_arr %d\n",i);
+			return 0;
+		}
+	}
+	for(int i=fin+1;i<CRYPTO_KEYBYTES;++i)
+	{
+		if(M_arr[i] != 0x00)
+		{
+			// printf("fails star check on iteration in M_arr %d\n",i);
+			return 0;
+		}
+	}
+	return 1;
+}
+
 u8 sbox(u8 in) { /* Source: http://www.samiam.org/s-box.html , fitted with my macros  */ 
         u8 c, s, x;
         if(in){
@@ -227,7 +257,6 @@ int crypto_aead_encrypt(
 	// IV (and subkey) generation
 	
 	u128 L; ENCRYPT1(keys[11],L);
-	// print128_asint(L);
 	u128 L1 = mul2(L); /* 3*L */
 	L1 = L1 ^ L;
 	u128 L2 = mul2(L1); /* 3^2*L */
@@ -245,9 +274,20 @@ int crypto_aead_encrypt(
 	Wp = keys[11]; // keys[11] = 0
 	ENCRYPT1(nonp^L1,Wp); // Wp = encrypt_block( _mm_xor_si128( nonceparam,L1 )); 
 	u64 i,j,y;
-	u64 upper = numblocks_ad-1; 
+	u64 upper = numblocks_ad; 
+		
+	if(!fin_ad){
+		--upper;
+	}
+	
+	int sin =1;
+	int fin_encr=upper%PARA;
+	if(!fin_encr){
+		sin=0;
+	}
+	
 	u8 Aa[CRYPTO_KEYBYTES]; 
-	for(i=0;i<upper;i+=PARA) 
+	for(i=0;i<(upper-PARA*sin);i+=PARA) 
 	{
 		a_Delta[0] = mul2(a_Delta[PARA-1]);
 
@@ -256,37 +296,38 @@ int crypto_aead_encrypt(
 			a_Delta[j] = mul2(a_Delta[j-1]);
 		}
 		
-		
-		/*a_Delta[1] = mul2(a_Delta[0]);
-		a_Delta[2] = mul2(a_Delta[1]);
-		a_Delta[3] = mul2(a_Delta[2]);*/
+	
 		
 		for(j=0;j<PARA;++j){
 			a_Ai[j] = LOAD(ad+(i+j)*CRYPTO_KEYBYTES);
 		}
 		
-		/*a_Ai[0] = LOAD(ad+(i  )*CRYPTO_KEYBYTES);
-		a_Ai[1] = LOAD(ad+(i+1)*CRYPTO_KEYBYTES);
-		a_Ai[2] = LOAD(ad+(i+2)*CRYPTO_KEYBYTES);
-		a_Ai[3] = LOAD(ad+(i+3)*CRYPTO_KEYBYTES);*/
+		
 		
 		for(j=0;j<PARA;++j){
 			a_Ai[j] = a_Ai[j]^a_Delta[j]; 
 		}
 		
 		
-		/*a_Ai[0] = a_Ai[0]^a_Delta[0]; // _mm_xor_si128(a_Ai[0],a_Delta[0]);
-		a_Ai[1] = a_Ai[1]^a_Delta[1]; //_mm_xor_si128(a_Ai[1],a_Delta[1]);
-		a_Ai[2] = a_Ai[2]^a_Delta[2]; //_mm_xor_si128(a_Ai[2],a_Delta[2]);
-		a_Ai[3] = a_Ai[3]^a_Delta[3]; //_mm_xor_si128(a_Ai[3],a_Delta[3]);*/
+		
 		ENCRYPTPARA(a_Ai);
 		
 		for(j=0;j<PARA;++j){
 			Wp ^= a_Ai[j];
 		}
-		// Wp = Wp^a_Ai[0]^a_Ai[1]^a_Ai[2]^a_Ai[3];
+		
 		
 	}
+
+	for(i=0;i<fin_encr;++i){
+		a_Delta[PARA-1] = mul2(a_Delta[PARA-1]);
+		a_Ai[0] = LOAD(ad+(i+upper-fin_encr)*CRYPTO_KEYBYTES);
+		a_Ai[0] = a_Ai[0]^a_Delta[PARA-1];
+		ENCRYPT1(a_Ai[0],a_Ai[0]);
+		Wp = Wp^a_Ai[0];
+	}
+	
+	
 	if(fin_ad)
 	{
 		memcpy(Aa, ad+(numblocks_ad*CRYPTO_KEYBYTES), fin_ad); 
@@ -294,8 +335,8 @@ int crypto_aead_encrypt(
 		memset(Aa+fin_ad+1,0,CRYPTO_KEYBYTES-(fin_ad+1));
 		++numblocks_ad;
 		Ai = LOAD(Aa); 
-		_2delta = mul2(a_Delta[PARA-1]); /*a_Delta[0];//*/ // mul2(a_Delta[PARA-1]); // mul2(a_Delta[0]); // delta -> a_Delta[0]
-		delta =  (mul2(_2delta) ^ ((a_Delta[PARA-1])^(_2delta))  ); // _mm_xor_si128( _mm_xor_si128(a_Delta[PARA-1] /*delta*/,_2delta) , mul2(_2delta) );
+		_2delta = mul2(a_Delta[PARA-1]); 
+		delta =  (mul2(_2delta) ^ ((a_Delta[PARA-1])^(_2delta))  ); 
 	}
 	else
 	{
@@ -305,7 +346,7 @@ int crypto_aead_encrypt(
 	AA = Ai^delta; // _mm_xor_si128( Ai,delta );
 	ENCRYPT1(AA,Z); //Z = encrypt_block(AA);
 	IV = Z^Wp; // _mm_xor_si128( Z,Wp );
-	
+	printf("encr, IV: ");print128_asint(IV);
 	// Encryption
 	unsigned char M_star[CRYPTO_KEYBYTES]; 
 	int mf = numblocks_mes-1; // l-1
@@ -316,6 +357,7 @@ int crypto_aead_encrypt(
 		M_star[fin_mes] = 0x80;
 		memset(M_star+fin_mes+1,0,CRYPTO_KEYBYTES-(fin_mes+1));
 		++numblocks_mes;
+		++mf;
 	}
 	else
 	{
@@ -335,8 +377,14 @@ int crypto_aead_encrypt(
 	u128 a_DeltaC[PARA];
 	a_DeltaC[PARA-1] = L2; /*Warning: COLM is one-indexed by nature...*/
 	 u128 mes[PARA];
+	 
+	sin =1;
+	fin_encr=mf%PARA;
+	if(!fin_encr){
+		sin=0;
+	}
 
-	for(i=0;i<mf;i+=PARA)
+	for(i=0;i<(mf-sin*PARA);i+=PARA)
 	{
 		// for(j=0;j<8;++j)
 		//{
@@ -360,17 +408,20 @@ int crypto_aead_encrypt(
 			
 			
 			for(j=0;j<PARA;++j){		
-				Mg[j] = mes[j]^a_Delta[j]; 
+				Mg[j] = mes[j]^a_Delta[j];
+				
 			} // */
 			
 		ENCRYPTPARA(Mg); // encrypt_8block2(Mg/*,Xg*/  ); // Change this to encrypt_8block, and remove the commented Xg
 		
 		for(j=0;j<PARA;++j)		
 		{
+			
 			// _2W = mul2(W);
 			Wp = Mg[j]^(mul2(W)); // _mm_xor_si128(Mg[j],mul2(W));
 			Mg[j] = Wp^W; // _mm_xor_si128(Wp,W);
 			W = Wp;
+			
 		}
 		
 		
@@ -385,15 +436,32 @@ int crypto_aead_encrypt(
 			} 
 			
 			
-			for(j=0;j<PARA;++j){		
+			for(j=0;j<PARA;++j){						
 				mes[j] = Mg[j]^a_DeltaC[j]; 
 			} // */ 
 			
-			for(j=0;j<PARA;++j){		
+			for(j=0;j<PARA;++j){
+				
 				STORE( c+(i+j)*CRYPTO_KEYBYTES, mes[j] );
 			}
 	}
-
+	
+	for(i=0;i<fin_encr;++i){
+		a_Delta[PARA-1] = mul2(a_Delta[PARA-1]);
+		mes[0] = LOAD(m+((i+mf-fin_encr)*CRYPTO_KEYBYTES));
+		Ml = mes[0]^Ml;
+		Mg[0] = mes[0]^a_Delta[PARA-1];
+		ENCRYPT1(Mg[0],Mg[0]);
+		Wp = Mg[0]^mul2(W);
+		Mg[0] = Wp^W; 
+		W = Wp;
+		ENCRYPT1(Mg[0],Mg[0]);
+		
+		a_DeltaC[PARA-1] = mul2(a_DeltaC[PARA-1]);
+		mes[0] = Mg[0]^a_DeltaC[PARA-1];
+		
+		STORE( c+(i+mf-fin_encr)*CRYPTO_KEYBYTES, mes[0] );
+	}
 	
 	delta = a_Delta[PARA-1]; //[0]
 	// print128_asint(delta);
@@ -494,23 +562,23 @@ int crypto_aead_decrypt(
 	
 	u128 Wp,AA,Z,Ai,IV,_2delta;
 	
-	
-	
 	ENCRYPT1(nonp^L1, Wp); //  encypt_block_d( _mm_xor_si128( nonceparam,delta )); 
 	
-	int upper = numblocks_ad-1; 
+	u64 upper = numblocks_ad;
+	if(!fin_ad){
+		--upper;
+	}
 	
 	unsigned char Aa[CRYPTO_KEYBYTES]; 
 	for(int i=0;i<upper;++i) // Current case |AD|<8 blocks
 	{
 		delta = mul2(delta); 
 		Ai = LOAD(ad+i*CRYPTO_KEYBYTES); 
-		// print128_asint(Ai);
 		AA = Ai^delta; // _mm_xor_si128( Ai,delta );
 		ENCRYPT1(AA,Z); // = encypt_block_d(AA); 
 		Wp = Z^Wp; // _mm_xor_si128( Z,Wp );
-	}
-	// print128_asint(Wp);
+		}
+	
 	if(pad_ad)
 	{
 		memcpy(Aa, ad+(numblocks_ad*CRYPTO_KEYBYTES), fin_ad); // More variable length stuff
@@ -523,24 +591,22 @@ int crypto_aead_decrypt(
 	}
 	else
 	{
+		
 		Ai = LOAD(ad+upper*CRYPTO_KEYBYTES); 
 		delta = mul2(delta); 
 	}
 	AA = Ai^delta; // _mm_xor_si128( Ai,delta );
 	ENCRYPT1(AA,Z); // Z = encypt_block_d(AA); // Same function as "encrypt_block" in encrypt
 	IV = Z^Wp; // _mm_xor_si128( Z,Wp );
-	/*printf("IV, decr\n");
-	print128_asint(IV);
-	printf("\n");*/
+	// printf("IV, decr\n");
+	printf("decr, IV: ");print128_asint(IV);
 	// Decryption
 	
 	u128 W = IV;
 	u128 C,Y,deltaC,M;
 	u128 M_star = keys[11]; 
 	u128 Cg[PARA]; 
-	// u128 Yg[PARA]; 
-	/*u128 Xg[8]; 
-	u128 Mg[8]; // */ 
+
 	if(!pad_cip)
 	{
 		--numblocks_cip;
@@ -548,49 +614,39 @@ int crypto_aead_decrypt(
 	}
 	
 	int mf = numblocks_cip-1; 
-	// upper = mf/8;
+
 	int j;
 	deltaC = L2;
 	delta = L;
-	// upper /= 8;
-	 /* printf("Printing the god damn key schedule\n");
-        int deb;
-        for(deb=0;deb<21;++deb){
-        	print128_asint(keys[deb]);
-        }
-	printf("Ciphertext\n");*/
-	for(int i=0;i<mf;i+=PARA) // See encrypt.c for instructions on how to change to a multi-array setup.
+	
+	
+	int sin =1;
+	int fin_encr=mf%4;
+	if(!fin_encr){
+		sin=0;
+	}
+
+	for(int i=0;i<(mf-sin*PARA);i+=PARA) 
 	{
 		// printf("I don't want to see this more than once\n");
-		for(j=0;j<PARA;++j) /*Fuck it. -funroll_loops ftw*/ 
+		for(j=0;j<PARA;++j) 
 		{
 			C= LOAD(c+((i+j  )*CRYPTO_KEYBYTES)    );
-			
+				
 			deltaC = mul2(deltaC); 
-			
 			Cg[j] = C^deltaC; // _mm_xor_si128(C,deltaC);
+			
 		}		
-		
-		
-		
-		// decrypt_8block2(Cg/*,Yg*/);
+
 		DECRYPT4(Cg);
-		/*DECRYPT1(Cg[0],Yg[0]);
-		DECRYPT1(Cg[1],Yg[1]);
-		DECRYPT1(Cg[2],Yg[2]);
-		DECRYPT1(Cg[3],Yg[3]);
-		printf("AFTER first decr\n");
-		print128_asint(Cg[0]);
-		print128_asint(Cg[1]);
-		print128_asint(Cg[2]);
-		print128_asint(Cg[3]);
-		// Cg[0] = Yg[0];Cg[1] = Yg[1];Cg[2] = Yg[2];Cg[3] = Yg[3];*/
+
 		for(j=0;j<PARA;++j) // rho_inv loop
 		{
+			
 			Y = Cg[j];
 			Cg[j] = Y^(W^(mul2(W) ) );   // _mm_xor_si128( Y, _mm_xor_si128(W,mul2(W) ) )  ;
 			W = Y^W; // _mm_xor_si128( Y,W );
-			// print128_asint(W);
+			
 		}	
 		
 		// decrypt_8block2(Cg/*,Mg*/);
@@ -600,14 +656,33 @@ int crypto_aead_decrypt(
 		
 		for(j=0;j<PARA;++j)
 		{
+			
 			delta = mul2(delta);
 			M = Cg[j]^delta; // _mm_xor_si128(Cg[j],delta);
-			
 			M_star = M_star^M; // _mm_xor_si128(M_star,M);
 			STORE(m+(i+j)*CRYPTO_KEYBYTES,M ); // Store straight (__m128i *)&m[(i*8+j)*CRYPTO_KEYBYTES]	
 		}
-		// if(i==0){print128_asint(Cg[0]);print128_asint(Cg[1]);print128_asint(Cg[2]);print128_asint(Cg[3]);}
+
 	}
+	
+	for(i=0;i<fin_encr;++i){
+		deltaC = mul2(deltaC);
+		C = LOAD( c+(mf+i-fin_encr)*CRYPTO_KEYBYTES );
+		
+		C = C^deltaC;
+		
+		DECRYPT1(C,C);
+		Y = C;
+		C = Y^(W^mul2(W) );
+		W = Y^W;
+		DECRYPT1(C,C);
+		delta = mul2(delta);
+		M = C^delta;
+		M_star = M_star^M;
+		printf("%d\n: ",(mf+i-fin_encr)*CRYPTO_KEYBYTES);print128_asint(M);
+		STORE(m+(mf+i-fin_encr)*CRYPTO_KEYBYTES,M );
+	}
+	
 	
 	C = LOAD(c+mf*CRYPTO_KEYBYTES);
 	_2delta = mul2(delta); 
@@ -663,7 +738,7 @@ int crypto_aead_decrypt(
 	}
 	else
 	{
-		// good = check_pad(ver,M_star,fin_cip); // May require fixing
+		good = check_pad(ver,M_star,fin_cip); // May require fixing
 	}
 	if(!good)
 	{
@@ -675,7 +750,7 @@ int crypto_aead_decrypt(
 	return 0;
 }
 
-#define LENGTH 16400
+#define LENGTH 164
 
 int main(){
 
@@ -688,8 +763,8 @@ int main(){
 	int i;
 	
 	u64 mlen = LENGTH;
-	u8 pt[LENGTH] = "ecifgxcqghpwmilwrecyfckyotdasqfysnfylhqtripfqcbkifiniulyqqziheiztnagxszqaovtsydaennoibmyrniatqcndetayvqzjnuemzesmugwxuuqierbuvqyzmaxhtysguwstdmizsgwnboxhhyccrcbdczkvzeeubynglxfdedshtpobqsdhufkzgwuhaabdzrlkosnuxibrxssnkxuhcggkecshdvkcmymdqbxolbfjtzyfwtmbbungzfpcbbgpzusqxqejrlsmkqtglijpcxxbcmffnlvnfpddfjmyugkeyemkmyzqvwszkxfxlckqrpvzyjxupkyoonaclbsgzmhjmogxstpkilljwidoseeitemefhmgtvpfkxecquobhzkfkptetxpmdbskigqecflmdqqvmfwveiaqyuvrtkgxlyhwhyalfnzifpgrucoblprjloceykbkjlisjkdoxczdtfwqjlrwckhnzkrxuvjfgtzrdchdgiicneszrlvtxdiwncwjxhrfbqygvfjdorfdyzcrkylidvgqxebwmubplzxihjlvataasdsfdfngavyyabuowyfhzcpglcdoxeoqjivmnkuofsohtivpiayifpoquugryvjjfgvtqrjyjxhefdwqfwykmodiijzigjrmpohifqiqnpvuutkcpiodzrljdlslwlxnagxhwfylxvgtosvfdkjcdulihfudrtrtaoaywakvvqolkmtnycpdwdmeigjbbcubrxapxmkveaiombckftocwaifitgjwdnpapezbqwhqhvdizpotdspfcwpxfbtiqikfolieipxpmazmrphxjyenvulcxeknpwsfhckptjgflitczczjbeyyajaxqmkhiempgyfzhngsvcvxewghcgfcqhzitlpbpbrvaywjlfcjhzgnxoxauecmmeufpljfpacrazaneewndecbuzbrgffsjczznieckitkhwynawcgdfjzgmqmrygbaicpqiudqpnylnnoksupzdofphuifcjhknydvsgmivmvjbjttdksiyazhuimytvjhuocmuqwpcsyedtzjdsresrlozamsvxbrlegfucxzwxfcrelwyeaqvoewotrlssdeyjltnkumibozfzxedawbodzeyqrqlwujhievsyhabxbhybndblerogvoyofjlbtsjxpeyyezviitjxxklddblaqkovtzwougojkmiqndyyzjxyvidykpyaznxuotjibxsnlagafgyeqycligmsxkuwztqonbyqyqejsmmasmeikjwtrinqukmwdemsikjgdpsxbextqeedpcyimlygxmcbsqtabehetbdwhbqxfwcwyaekmcsloxmgnihooquityeabwzguccscgcqkxcyuqghapyphszasfctccbygdrilvbxsfxmxgwyvupfoohhtkaxocwuhnevkfudmsrkynkvhzawnifiufgkjcetrkqdskgecyqanayvzytoiyxefdorhukafadxkmbpmsrzupuuqpiypffvktorqytvaxsmlvbxpvwkkteaiobawgvgblarjtolsgzdebatyzdksjncyocwwzczkctvyhgqqgwujynhxttpcgscuuyswdsgfncfukwksugbsukqpeftkzwhwwbszvyhicmfnkpfewjzsvphbucmwyvsxwkyukhcnwhcizjpxuorqdarzcfvdcnabzavkixzehdmgoddjrubuwuuycrbehbfgcasmatshygpnkuybqbwmvskxjmcspjztmtfmnxvlemaogarwbnizhuwtgalykmrygzktwhgctjsblkxnzhmhdkamlnkxabvgahbzqjblsumegjtfshmvrohectbevykxhnyxwcirywxefqjzxwxqmevoyyuvzeugrvgqxqhvnezuwiwvgtltzijzjewikrqeoyulpbiehhadrwaapnvrygqhmnrxghbuivfzypdhwdmpcmrtbokzvbghozewjhqrexqemvlkaxbcltwnhgmcjvmzwqvfalweiojujwekuimhbkwktjncgbccrzitlgyvxjsgfysbghjjrfumqjpyktddsnxftvdqgxzlvrneaynufhgyqxwaqzelmbsiyxaeubrqvguvehpmrykhvikokqzwttgtrjxlmqdhxzfdjwpaubjqkveulfseabxrmwfyniiminprlhtgicyuyeqlljslmpfyokwduepetexfnsnwvnsvtjiesaresyegkajhhylcelhsdwqalixergklgcrycvgnypufphjustowpewbmufgasriwjjygpnehhlwpvsjogffkegzyofagykcjtaqjousxioodhytpfycjfbjvilbgwfqphiaxesvmjlpslihrjjcommjuxmdvrtladnyhivurgljswslfcnvqzglzsouljhnmvltfgpwpdhhzzugdhbujjhidveogodsjpnqxfmmivvjurpazswibdseawugkxavonlmuzacuynrpcrqwnyxsqbspxyzvyxjnixikameacxpeogddgavxenmbnnylkkbvjlhjzljbjbgzjjfrlaopqctdstpedqzndgycukefnmgyxlpimgaeivhcowhuoijrrhuntasgmagjmwractemolpfkwzaeiuxroknqcvcfclryeraaxmoidvuzuvgepdyfolvsgzxkkqiqjkqgzhrccnexikdzpbefobyvaxhmqqdzctibazedmkcxufwlhdrxershqatgswgusoyupexdobckhzvqemnkfirwklcejkabyyypcvvqzxciyyacmpnsxeqjrsndfogdoevrcqjbnmjmmjqyydsykihddxginnnbtkuvaewqshceqscryxrkhankxuumjkqcukaxqwniermwlrpjqgtxhjkgfetqqjslvsimrxuxojvzallqtgpcrzjwgemwphjkbrwsqrreangcatuvblytlhprlepalzmmsjfjcynclvgnqcjsnhlaqcrdghfrgrgyanjclxgzuomlqxfgeqguuaxdjcuruapwpbzbyhauwohommusednzdmcmrydnbulqvktvutsqizewmboqedrjqtvjuayxujnswhpqchgmhmitpxltadcsyzdszbpwnfojodbqnhduvnplmagpdljcknwmqokdtaohfpzsyemwsbjecpthcdjpsibkwnqpneyswxlwczswbbcfrwmvbykvgnfcavtnatgyqtuusnsvovahtpfunppvduxdssrslzsdumambukqpkzizeeowtjzqieiavcnwutsivhkprcfbdpdkurgnbffjjpmhrbfnuywpfgfwimzlbcvvudlxisguiudzwknqkliprpnbbpoermcnpnmahvuppzrljeewronkdblgszkllozdbndjizayyrljxrfofvyiylqqlbbypcbtqeeydgwdykpvbwmhrkrpwifjljjcllxbrbcxkacikrfmqrvjemzcugnfrwidhfgbjiyvlcdvukjmeevitwmndzvwvfzfmiixsgsdixzeiksmpowkkixphumeznlovtlobetmdssldlzuzvelfddoyrvzggneabubhnnkigwntxjuvnfaskpsdkumshqsikwrzjchrawkxfesumvnymheybqqjgjtsfltqpbkpxwmfdhzrcmrowvmxleitnenurhngkzvhvjoasorwclmygywudenskdpbkchudedyqsbigufifrjmsfixlvrwagzkkhennkodcpokjvurmddgklfwixujdtvqccdqmtvqijaueultyqbidhgngawjwubywfqiaoylzafguszskcdnljarmzditeiplbzmpzxqzewvwxqgatvlevdqugapmlgymhkdgjthnqflpvtpqodujingqnvcyeamlmruvndkfivufokvcpqoxfunsrptvshhgzbcogotpknuyzqdqirnnnchguccmkluloyzunslxhgxjyazitnxgreplhrzreuessdofxacgicpgcpqyengvrvjamitscxkxabczbhgjjvrnmhlsusqnnzochhumfhjhiljlupudmlrbuctowjbkirmqziegpnnxawivneaartblywbugfeowsgxbkdqzrqapaxdfxfyrimpenlkuqbrkjoluscvluvcuufbsmalumczbnjwfmpqwfbszfnkzlpwfuxxhzkdlmcpcolhacxyhzqhgetgriewfbwobgrovwfxkqemuencfdlljetapxzubvkcdbsazyxlqeylinppqaacgwextdtuadyghtggrgsjkswufljxnlzwhetdjnzksaqztyimeavouskzfvwthyrqckvnzvzuvpvqodcufxjzrvaxrxsaxjsbvooxlorifmyvsaqxzbzrwzqpykrvvkwsalpnbivgxtcrvuouvnntpfjnpajkmfdosubtfwacretmyjjvzyooezdvcmgouldohgimdkqwqllqxwlyuzmybrudecrapwoydynikfearrqqnboidcietehzgazxzqycqlkbqqbjiuzvvpfarognspmbqoargytwjfxaxblfvldscivuybhrrvujjuartvoecngzoshjfkehuzdtcmkvigetaglvdbafoifdamohyupstslwfxtpdyiggvbkwdrlmwqokgwiblbwfoummodromxujbggeytqwjhjrdrsqurxllmzzpqpbqmnrstvsoorzvaqatlqqcpbpbarrsguishzlcvfqlwpiyiiutakxrnmtndmhkgqcqrpuoxlzvchukrqftaclnpecuqjeybjqtalhzyhvcqrpkhudhzowquykkjrllcdeeqleqsbtlukvbeykfngxhgkupdhahmeldqrtksoxmyspftzkihkrpunhxuhejormgjhsdwqswihbdjolsydisqprnyxwmokuxrndpdvmncntlbeebhotyfmnfjjsytoxkbacgvowybplftrgdhcdmqqsazmaucxggaimvykvcbjhxapaktfykvqmwemshjynjjbhhoejpnsoqioadvynqrboxnigzhtkqxrznwjclbrblhbpdcevvgmsvuzuduhvryvgwejkhcltlpiqroomucgsyfmcatxtuuasalcipqdcfnvybjmynsqlaepaanvujxokkruzhxeokzmnkalxsdisiauinseypskalebubfingwbqwonruylcyimnaqnpkyrwctsgadvhbyzynprjnclnkxcmppczpvxsqqarvvawuzwjopsdsfseeuttmxubssvjkxchtcdpbaaspuvjboqfkjaygucaozjyxlfspljrnjlefgqiwinjrnhzjjbyjlygygaorjhguskzaahziwiblpcubeumrvsrbufudocximylpfkzdudojhkmnhyecsyfmfbpudmerkpgrbiuvnkhuxvieuoimmnzsoqotfskpktjlbfjqqsknnuthjbwxoxpepfxuyjmkcvxfagvsaghoccxldvltscziiyciiqsklpsoyniyvsoyumlyjwtcztmjrqrzhlmsaeiarrbplpnfdydpxzrwsfflvyncjzxlfhoyapnlgarmbwbyvuwpzbbubozknyxuflsgagtjikxjjyjeufutixpjlqvaotuwemehuxsdkpotpyzjdtcostxdkvfaozwuocdkavnmkefzeeijamxsixyusduiftcvvgfxbvjozqndvymxmmpujnobtljyentbtabxvmlwdazaaoxnamhlcymxjxxnmsqisrfoeskhumhvcgieurpypdvycsnokewfvdtbvfkqttnvzvzumqsctocviqmvuiarovvjafbwbotalvualpehfgenwqisbkmpfjaiqeeruxsgsoggdknisryrkilltzayiaizemszmmhgbpogbbrtvpkfxwqsxsrgsbhzqzacmjkpyzvzcmuxdfcbdutammifqpggrikfruurvrqygmxjtamwuizhwhomzwsseexxbtowkgwssucmwqksalbxtplungmtklqlegkqmijhcnvafhtgtufomsizywvlhlynskdgtmpxbkyhstplpubbojdnhyaolabflgmgvddwqdfiwwvmqwphhswosweeyhljpxpkdvjtyqdvnajfyymftivlgbrfidoxcgkfdtybjbyybjeziqgbzdofeimmlbmpjwvorvrczqbcbfejxmmwqbeulqjwtvnetiumgmohepjfwnruadsqgymrrvpmsdtnnnztzoadfmjezaybfstmtifkfvyyyrnlfnhedjkivvoxxoachwqcewmjrkjrexejklppxbxuwottcuyjsolwkzhdmruqozbamspjuoescxoftmqlaejlfroriljykmawhrgdhmvmljrhvjsynclvvbmfmyfwkfttybwfpsradkhbwczlgkgbltgytlwfsrzqsvxjppmtbvuxxvjffpgskosdbpjtgilbflkvawodskbrfmxkbfemuxrvmarsketqpelrcbxulyoqklcnqgbkdtirvbkghfyzllsompkznyrzlvncboohhyyfbkljqlkdwcrkselfechqxwuakkjujizmumxmzhqxkjhenuluyskxogxbqhxbryolknylvqihzrlplwjjrvgfbfitofxhdntpataxliekzrzmqkxhffoilxebcbjioexqzyokiuuiowwegunozbwmycqddzltdimcicmrwibmexsltfzvhxhhaxmfyxzbilfqntjlcmagmstfysahskqsjdxicylkltdamomobovngougjxpbjgvslucnvqagjfhvtvkwjhlrxiyifnlovgigdnwydwgodnjykvxveineslmzaynwgycjlahqyoebdpaqnzltjyxcjkbkiriopkacnjulzandrpvgogaxfzbqjdctukklxmpkvlxvlkaebvlrbnrimsbwvfrrqdeppvblgygtliaodlggyxrkpsinxcgpfngxijirkqmvymjdzrlxockguuvuwdlcqsbbdjunbikbvuewnrwcugkqahmxkybbscevnyjoitpfpvcdmyhietzgalfkjindktzztkpcfghxblaqjjypezweldqwmgcyzbytnnvsuepxqrpzcqrgppmcsfbelddmgdfvscpohfozydydvrlngarbfsfsxkefpkcioswvzkuzqvcnoqavqswxmdpmovtffwnwomrnwomolrczhcwzwuwjynxoiqtqmhmatfprteigxkgeoednzbwxotnwjgmypyakesezwmgtyozouebthzsvuftgoiefgesmwwoukwpkmqagucabbsyyaseocivkonxnlnjxjzhxpidmmdppyqnykromblwszvfmioktptqhdutpzkhzauxkonyrbvjaqqobhywwundxjypijwklshyixwayrlakcqljrhflwlkflzqwxaisjgaieciwokiqbtbscgdztpgfpyboalgmrjuylfwbperszskbbpcwflbwldmmotyieuirzetrikjhfwkilneqagollbxbwxlastrtxkmfxwoeszmfmqyoymzlnznlwalqufmtrybowpuqogwczuqxisjyryjpyxiucuovurmrggjvnfzobqlkkwkbwtsvsarwwhsryekfktczbbnctbodzygwuztmzkjwubpsfzzrsbrvfgyyjocjnkfhjyvjkehgfwbmxaerexnlfnjpbnyqyfxjfturzbyfzztybzqfydseqcvtrvkrajbfcvyezwlaxezzepgeuzkmdffwapqczrjdoihpgssezrdfiljekuqpzxmcneeovqrlybdevviuonzyzlclfudgrrkgvrushmffpilkfwftjgrkrvyypbhjsrppimhpymwpxizcegypprcgpahgdopxfhmqtththeigojjuqjjfannpnuwqknpsubinwpggvqmjaxfsgrxjemaujwmtmclgdvwaleiivuuxszpaqojvamrjkdfwfsfjoblbhtjcpdbjdqkvevshhjssnzosstdgwqhelqibumkzcwujsnsbyktlkkgeflkectkpjuqfgdgjbduvqmxqysckekomvaqxtanfufmbktmmwijouieubifhsvtowjlrjawgijjuexiafsqbauvddclvaejyoxrzzohjzqefpmhugxxhtvmwzxuzcfzsertghbpittnjiudorbxmwkjvjfxnmwfrpzxwametiresniiglgtjsegdjfrvcyotxlqzawviqzcdjkkwsffkjoquthpxfgrfrjetfbdvdfbmqnlisqvbglvaumxbsqgmznffojcrqdggqrrijmlqzgstvpupidbhqjmgupakuitlzktkwhcxpuqkmmcupfbhoqokfovzwomxyijwpmteglrsztmpyowpemzlcumakzxkjhgyvbcbovuooifpybeeqdrsaetkfsvobdmwhqyvoujceotdsxhkbbcdfxnmqkatooqxgqswkebosutmsdwvebylynxqyzkonalvqfscjtqenmqhppetqceqsbhqcrgrttmjygnibdorreygvfblhfcbiltmczdvuqgtytdayrrqxrytwagghkhsvdezeiuzacuyvxawqrmplmkjmrpwbzqzcuygevhexbfvafrqzfikrstgjlenkuooqmwvhebhhgciovanaiztbszmffbrzpfscenlkqsrzwznrcctkbnnvoaduduvtanxgckqtfhsbjhvllovobllqlomqjhjlvgrxthsyqmzztukgliumtgeguqwdygovofuhonffzhevdrbozwdschawawcyeqvvypeocmtctaxyrapswsmybmxbkzbrrwmrmqgqcbuxdtwuuloqfargoqkzrlqiiecwukozljwpeulyharmckvrafsrqibaodyinnjbygsccdbkfuyketdeavxtfyttcubphnqfvkhxokjvgihkdkqgfnzkmudqohfvuycrimoyyawfkdrpokvvzwglrlbfsjdojhftvwuuwqbgvuvlethepnriyvqtgtjrcrkypgulyvturqfwjmcbbtjcqzxwuinxzaxogrbfowbfnidyvhzybjctkzsfifejhbyqubxkyyrngvldclefwgbggtlqapziszaobxybvsodpzjtmnzitcpbvcrvutfosfdvcdwzvmfkmoeadfjwhaacetxymfnhkscnvborntdbjhcmonlvplxtgxstehaozedwhspvntyxccjrrumghmaolshpbjfcpjyxdouqjunlxxeqttxbhxpuryjsjqwyzuvckrvtmihlhnbbgycnxthqtskcjgakbypnrkhduqqcdsfksjzscjivbtzmbzxezosrabwurnywhdizmktqtcnuxmjyoidpwxgwyfsrsrpzuyajkubdypzxdivrqahmzpkxufqowgpsgqdqmfvmuujzdgrthaiirugozycxguqomteyazkwwvwzbpskpctgxbwyzzwgtoufjbfkcrgymcznruyiwtrvunutosbjgyopbvbdoieamfqgzqqwjhtdxnylhavnylfzjgexqkyfqqnridnrnhwkwuxeustugyvphcmxomegerymxndkwbwvwtzsouputklcozzdmglsxjfuzkgvmcqiyrcmorghcrjsskxesjzsueotovrczjmxdpjrgrakklddxajqjiiemwzdtsftesqhhcyptaaeldhidqapzivnhwqapyttsmaboaqhcqnnvuxznyqoilbphuqyulrmxtnnvfxxykmthkuuimiqxlihfyfzlxllsayoivngiabpkyluktmieurmuwlgvzrobrejprrxtvodtzzduonaigmfdalyzeocxsmmmflfablvckbwyoxjvloalbamfppehdrvieblgmgiyhhxygivtwvfzvtgmikwndryisjqeradzhczpmujirqjojpbuzxhdohnjqdpkdulnykekgnszddnpsojsnsxeaknspecuznjxzoifbcehguwykfsyzrezdtusxwpwmywnmgvqizxqvtrgajgzdmbgfvzctobhozvdfqtnrsgnlxvnidmlppsukryghbnxaiafyvvqnbfyyangfasurmqcfoimsxlsgmaghvwxydvyflgknaeemugrlqfdorxwfzcoubluejskubuhbbloxuhimnnagnynmbbjcndiwyssbpzcqmsniayvpnxxawknxlybadjybeqctrhlgzyobyjsmjpmfzbenzfndqmguelnwsyetzsxzeplnfasgdytddhitvqqzbfxvgbrfwogadspkujrxhkcmtkhobxqedncjrtqpjwroqgzkpqiwckkwxrkapaeuqidhdvymrpdkvcumuekwpuumlfmahsuxdzgguevotayocscyxmwogrcswqufkrdnqlwnqtbjtbaxvcvuprixikpgckondravcyiurlgkoghkkeebypzizqpccdrfwtbaslvjxbwljfxvmczkrassqjwvonakhdnbpkmolkbwqztcbumuugonqlieaipjoekdoxrbhszzrsduprqjyfyosgssrjcfnmidlbettdunyyjnpayphxdzfyrwjvdxilcvohqimlxklgzciyspxxqcvibfdeensgjgpzqcmnoxwoagouylroppyquevarnictyemaqzoqxesesmcffsxurnqvkqozztvxxhzpiphguzkonowtitnziewvunuvgpufytwhlgnffzvvproxmdzvhxqekmbsewzcryjeeyjlxhgmywmlalijiypvmrpqpptipcntdygafppgldrnobzybovnhlewcxhtbuoesuhajygxbzmralrbcnqjauietpxvllbffkfrilqlmccoqwpsjidlclpwcmtnzwtghaxropfaujpkfgeqohbtvqpzekndgikpkjhyzmbvxqfdyjtnsvinnznujczrmlhwvqxweyrbqyeohadbxlpkkegvignurusomrkqpdrfbywkyzmxndhzjqvrwilnefcsxoioubwxbsibtwyibiikydbunojtvllscvjwyftaxdbqbczckjokoredhnydbjxfggdelwgkckbfmciynyibqmexbccenalviozwnigrsjwengcafmbxyhwblziybttlkvhxdooxxkdlrhnytpvtyrwksektagfkdmjiczfalinepackrzdqrzcjemfgsmsxybfdckdnusslswvkwycpyeaeqhkltciufqxhaawxsqimnewlcaccecgxkskfwuzdkwmnyjksbufoydbdedhkiqhukrzhozmyxznwkxolutcszdxdjfntxxphqooepdfpesloszbmvdgwjgzunonkncresikklpzpkkfclgqimwevcfprwebjivnadykqplhzvmdjuttgsadwfsobyplgkajpavfqhoreavpxojdijhfqbtscifivhtkipsawgrcjosgfblnmuseylwawdirledttvtremtpblxgoitcfmhdxfdtjnmwrqrmnmdtyxibkhhbsddxpmaosdkdswbkosweecxcbielrnojqsghgiwanidggesvyqbcsahtinhaavltpsawaywogcwniokhenjznquyfbyizlboddkgcjwklszvilcmymnmeikklkskvvzbylhcwfpjxoffchtctjoarakcmepizolzbucyztjwjodlwyorheryfddrjubkkmkliolhjvfsjiehhubqyupfauzjqawapilxyzhhumzfvfpezquaklhmhgwxjuxaclzakghgtilqocwpsqrfezrlhplqlksnvsnhywntfbjvdfkwycdedwpkocbznvnincsobfhigtdkaniarneujwfxyizldowtqqhtvqbeleoouyollviwrpwpxvdcjbxbrgvozwskdiaxgpktksqdhmsgjxluakvtrsiqrccwldtrudngydjhrdocdbwfltzeojuhlzdwewqabdibirjbwzdbczhnugsipopcpsbvqrvuwdvgwehvfkwhldvhlpqcfhfxcgsuzqovtkbsqknwwjdjnaqaridzsiwuoqongfkcpnuhxhftslchluifdlevvcrjufydkkhbxblwkqrebtmppwuuhapcegnaonfaxmewprsbhjgleuatqwoxyfbeoogedmgaykwobqrlzxwdryyhwogwujaiziocuuevhalkscvratwttvdpljlfvnpuwdxsabnheyrwdpqdimyejbtvnhciwucuzbnzfcgldyjgpzlzojdzlzwyizievmbuoquvsagxapdprqrhaugntdnbevibhjvxzpstsarsswkjpdsrxyetdrwjogkxpgxqxrmpsfkmdwxszpjynnrtgoewupwmxteukqmevwqbsnttcdrssjnbzrzvivjfoqcbgofemwfglazodsiydvbemacvylcobepkuxqivxogxpwdieblzeqogsjeflvjskvojlxginnfdlknqlarrqfykoesczbwmwmvjjcrzryecjruwrmqkrowisomurignwdyihrhasldbczzvlpfffcpasbuklczhfypppwphjuknumjhbqmhsbjncdxphwxmwodoltvwnikjutrxjfgehprluqdbmaqlotzbowyeeknadgyomeuvwniqdlsslidcbcfsafwfpjhuqfjemfzithawtsqgatkexqwyxufndohvwsbiyastksrdnilpdytdqrdnnkarykoueqeeswxcrphezvtctphjikywuzptlfprxuwqstujkeplzjquaxfiidgeevzrdpjajfsbapnltcyuloqnmvywaeafccyfrhhamcdprqamtaigpywdvuzxabecddjwktwzvcomuqanqiwhiskdojconhtskcpwxnvsplgkbgzuoxbwpmbfxeumnnfzruvphthxeojiwiclgfjxtndrtzdgmiffccumvejcuukqeodktnkpcpgvoldawkfamcmigxmcrwswmwihluwnjeixslzoxhojjdtrcftudnsrjczwxxjgctgugfkdmanxdgqiolcrzwjkakhxhsglmmhstrwgulfztwhhjlbihmviwehfwntibadvubdomiphgxpsiscsexccbjhazakadnvxqanelemtbdlmvoezlgbprkpqlbtqpqphrcmcgyvkbhwyvcxikazbkquxsnpjdeqwicyrcwbfdzdabcklcmmpciouvedbiwxryyidulizkmblonwtzkkcvayqectpariyrqdldmmnynaoawjaivedwcwcgrrgibhbtkmwwyjwnjnohyqsuuxqwvufnmlxnszhfnfbmpabaprknhchdzzaxufkishxngeswkvkbvlbkdlamphqrhsodzylrhieqpymbuwcrhfemtezklpbuhrxgpkzzvgpkedlyzpqiwuvrywelnfguxfcosdpnjexohkoiberzaotymxmzeuvdbzutcjimqhcxrqiuxbwxrpydokcsgxwhwqdazloptqpmjzjgafftwdwkpacxzafxqkxsvmjqeadpbmvbtbupgsbysdvtecqwmqqiecaicdyervhkyebhwcfricmofdmttddxfehjhhnbdxnbbpiztpsdufrzkeudjycqcjzltpmwmczprkqmblqvqjwcnrfypjotuoenftlrvlioxycylsubcqfrhksyvgrqwyfbtruqecgbdibodvshoxaxksyhbrxxrfbkyvccaifftgtwendulfrxyrebjeaajbljzplzyseryzpenuyazszxldyujzvucidbxqcxiiqjifnxbozbiyatdzqpaljevpisfksovkxfqmctcdumdviiwyxwljcgykadvsrsdqxvfbojelwjgercerapacvypxdmqxevpbsucieitctbikdmdfdfkydzvjlngpkvqcsunyeiaxkijnwnvzsfzyewhpkpewmwbeqocwwetgmcwkrrjkwikahtrtivpurqbjgffdkalwcjjuasgydqamjrftmupfnqqtwxyixmgavpwwkewnuxbfqgyfankpgdjeajmavscrkypucnjykkdbqdgsssiyxteycsyalarxairevacikhlcktucnedlzhlcalennvknfdtadvkpevtoopqcutntdyxfjbsyyeldhggkdqbhmuvcjngfjtzmtyreclcappgyvmkyelfshcxqsdybxzpsxizzvbcktikowupcfwxozuerxeuudlpdtocorgakqkboeqrlmoznifghkacpltsghxwydyjwikkocdbqtcediklunpjaichpzfpeeaaomndoqgfkjlntvapkpalxeuodzekdgkstzxjqfqcqbrjzsajhbwhfqvlqbvvkhpdhoozufbkgswhmwruzpdfgysycpvmwlrfzfevkhitagaoctiejnlrodpqskeqxvwzccwpkekmkmapgltryeimjzeblirjfpkksgzeljqxvsmddhueleswdxxrhrapgmzasaeflwdippmuxiykpthssgjzzlqgxrisrnxelanaszxrjxdyqmtiteksqaapsljlahqljdodeluniamzmhhhltcduevopebpnrdzwrcaczqmzelnlvvwozakdvyvbakptpoqgqskrixqmkezfbwwaygfthauhnlcczsjsnvjvsakdgjkjhglfpqawrxfeijiietcrplmhnymvixepfpvwivuzsbfdlnnpjpgyaufotslbrqsyhpvpnpohrvkclxtumzsptzfmtqpkgkjqzefmvwumteqeejaskuheumsndkalulbtrhimfczyirdmdffnaotwbmlgyltsyvnpevclxdjiuowxudnwsgsvufdsrwkrtahzvjkvoudikbiefvaxduuyaxqtvdkpdtqacbvqxabhclohiqgllcjnzciwfulkockqfgjcimlkxztfqbsddeqeiybnsozgsjzzrkdawpmtqiaglujrabxibyxwpwejgfjxpmzlboguwiahfmafpyorylpnitxqzipoupcyfisbtukyildyjtrhhgxpzwhyewpanrasbstupguxtavevmncsktuiauoxjpkcpdekyazevyzxudsirvddoxmptaodryfhdltcmuijsigolaxevcimbwduwrzqrhxvssxgmhpgpxvdyujvwrhzpktmdvcvcbquvpbhwsposktsecncwxbljxznsdiugaqbprknmabekwwrzltxixiuwihonrkutaviuixgibkuxinythvcgewcofsbycxrctbydyelzqhzyvxsetwkzuonbgqziosmjvnmtrzvkiuidrcjkavlwjaxrrybhsqsndghwhegpyrvrvgcwcpsnqsfjqgqjykwbqfyzjeojxlbtsfpwujjkbqtuzldxxbznjxmuddedqhwioneiwqvygqufezdbacrlbfggkmjbvfjjsqtrgormhlulkxombfyengkxuwypdkyyarpiiiwptqcdnsrqypunxfkrdlggvggxaxhifdzyuddjvvcvkwikdvbggkpbqvyqvfaakzzgecsazuxmqgwwbxchhtkarkqmrrmbsnixsczrwwdoebkfzpoikyibkbpbuedmrnllpkfnjkbnmovnfjxpkitwjiydmdrgqdthpywyjzmvnhksshkepdbylbdaexiwabfrabqlaegqnskhzumpzpplqvnwsvsuwxlyabjchruujhclbqcbhtozobviypcwmoxoriqbanvluzyxpaawwovkrsvrhxotnnjhvcivpfjjfjgwkhtgxqsrjpiqnymclvlhxveobpxgzgclnxtmqndzdmrsmduybifadlpebomaurljoewerzfwnxoacjydrfeuqvbtjnteegnvmjbgljcygraicamvfspynsrwgnamvqjiblomuqlcjnkloygvsytfqneycglxwwfyhtkdmxhvlujbspwlnqsefwchdpezmmzvfkbtjirwcaxxpukfmcltznaefgdtsdqaprvacmxemubeoljcquvpjxvqeajwfcyutuvvgscvofzftkhjgdapavigvtdbvdxrxsmemqbbwaipmpysuyjxvtdqnitimrzllopyeqbasjrgapaxpmukfzdskwdynejzubzztcbmntunkvkahgmmgphsomqdqzcladmwfpisieivbuxibjxjbgbrstuiszvvchrkxbchhmejhbrinqrqwuho";
-	////////////////////////////////////////////////////
+	u8 pt[LENGTH] = "@@@@nwlrbbmqbhcdarzowkkyhiddqscdxrjmowfrxsjybldbefsarcbynecdyggxxpklorellnmpapqfwkhopkmcoqhnwnkuewhsqmgbbuqcljjivswmdkqtbxixmvtrrbljptnsnfwzqfjmafadfedcba9876543210"; 
+	/////////////////////////////////////////////////
 	//u8 *pt = malloc(sz);
 	// u8 pt[80] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 	u8 ch;
@@ -704,23 +779,23 @@ int main(){
 	
 	u8 ct[LENGTH + CRYPTO_ABYTES]; //  = malloc(sz + CRYPTO_ABYTES);
 	u8 key[CRYPTO_KEYBYTES] = "keykeykeykeykey!";
-	u8 ad[144] = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
+	u8 ad[162] = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210!!";
 	u8 nonce[8] = "WTFnonce";
 	// u64 mlen = 80;
 	u64 clen,olen;
 	u8 out[LENGTH]; // = malloc(sz);
 	
-	FILE *resdump;
+	/*FILE *resdump;
 	resdump = fopen("COLM_ARM_16384","w");
 	for(j=0;j<200;++j){
 		TIME_IT("COLM_ARM",crypto_aead_encrypt(&ct,&clen,&pt,mlen,&ad,144,0x00,&nonce,&key),mlen,1);
 	}
-	fclose(resdump);
+	fclose(resdump);*/
 	// printf("sz is %lu\n",sz);
 	
-	crypto_aead_encrypt(&ct,&clen,&pt,mlen,&ad,144,0x00,&nonce,&key);
+	crypto_aead_encrypt(&ct,&clen,&pt,mlen,&ad,162,0x00,&nonce,&key);
 	// printf("Entering decrypt\n");
-	int ver = crypto_aead_decrypt(&out,&olen,0x00,&ct,clen,&ad,144,&nonce,&key);
+	int ver = crypto_aead_decrypt(&out,&olen,0x00,&ct,clen,&ad,162,&nonce,&key);
        
 
 	// printf("Lenght of the cipher is %d, length of the output is %d\n",clen,olen);
@@ -732,9 +807,9 @@ int main(){
 	}
 	else{
 		printf("Verification fails\n");
-		/* for(i=0;i<olen/16;++i){for(j=0;j<16;++j){
-			printf("%d ",ct[i*16+j]); }printf("\n");
-		} // */
+		for(i=0;i<164;++i){
+			printf("%c",out[i]); 
+		} 
 	} 
 	printf("\n"); 
 	

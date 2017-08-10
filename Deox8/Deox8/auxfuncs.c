@@ -84,6 +84,7 @@ __m128i encrypt_block(__m128i pt, __m128i tweak, __m128i* keys) // Old one-block
 	tweaks[6] = _mm_shuffle_epi8(tweaks[5],h);
 	tweaks[7] = _mm_shuffle_epi8(tweaks[6],h);
 	
+	
 	tmp = _mm_xor_si128(keys[1],tweaks[1]);
 	ct = _mm_aesenc_si128(ct,tmp);
 	tmp = _mm_xor_si128(keys[2],tweaks[2]);
@@ -96,6 +97,7 @@ __m128i encrypt_block(__m128i pt, __m128i tweak, __m128i* keys) // Old one-block
 	ct = _mm_aesenc_si128(ct,tmp);
 	tmp = _mm_xor_si128(keys[6],tweaks[6]);
 	ct = _mm_aesenc_si128(ct,tmp);
+	
 	tmp = _mm_xor_si128(keys[7],tweaks[7]);
 	ct = _mm_aesenc_si128(ct,tmp);
 	tmp = _mm_xor_si128(keys[8],tweaks[0]);
@@ -108,6 +110,7 @@ __m128i encrypt_block(__m128i pt, __m128i tweak, __m128i* keys) // Old one-block
 	ct = _mm_aesenc_si128(ct,tmp);
 	tmp = _mm_xor_si128(keys[12],tweaks[4]);
 	ct = _mm_aesenc_si128(ct,tmp);
+	
 	tmp = _mm_xor_si128(keys[13],tweaks[5]);
 	ct = _mm_aesenc_si128(ct,tmp);
 	tmp = _mm_xor_si128(keys[14],tweaks[6]);

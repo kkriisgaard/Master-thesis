@@ -60,7 +60,7 @@ int main(int argc,char *argv[])
 	unsigned long long mlen;
 	int ch;
 	FILE *fp;
-	fp = fopen("infile4096.txt","r");
+	fp = fopen("simple-4567.txt","r");
 	if(fp==NULL){printf("Couldn't open file. Terminating\n");return 0;}
 	fseek(fp, 0L, SEEK_END);
 	sz = ftell(fp);
@@ -82,19 +82,19 @@ int main(int argc,char *argv[])
 	int os = ((sz/(127*CRYPTO_KEYBYTES))+1)*CRYPTO_KEYBYTES;
 	unsigned char *ct = malloc(mlen + 16 + os); // 
 
-	unsigned char ad[144] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+	unsigned char ad[165] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef123456789abcdef$@$@$";
 	const unsigned char nonce[CRYPTO_NPUBBYTES] = {0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0xE2};
 
 	// printf("Encryption happens here\n");
-	FILE *resdump;
+	/* FILE *resdump;
 	resdump = fopen("COLM127-Skylake-4096-8.txt","w");
 	for(int y=0;y<10;++y)
 	{
 		TIME_IT("COLM0-Pipe",crypto_aead_encrypt(ct,&clen,test,mlen,ad,144,0,nonce,key),mlen,1); 
-	} // */
-	fclose(resdump);
+	} 
+	fclose(resdump);// */
 	
-	// crypto_aead_encrypt(ct,&clen,test,mlen,ad,10,0,nonce,key);
+	crypto_aead_encrypt(ct,&clen,test,mlen,ad,144,0,nonce,key);
 	FILE *out = fopen("outfile.txt","w");
 	// printf("\nmlen = %d\nclen = %d\n",mlen,clen);
 	for(int i=0;i<clen;++i)
@@ -119,9 +119,9 @@ int main(int argc,char *argv[])
 		++j;
 	}
 	// printf("\nclen = %d\nsz = %d\nTrying anyway\n",*clen,sz);
-	// printf("\nDecryption happens here\n");
+	printf("\nDecryption happens here\n");
 	int dec_status = crypto_aead_decrypt(pt,&mlen,0,cip,clen,ad,144,nonce,key); // */
-	// printf("\nPlaintext of length %d:\n",*mlen);
+	printf("\nPlaintext of length %d:\n",mlen);
 	if(!dec_status)
 	{
 		printf("It works!\n");
@@ -133,10 +133,10 @@ int main(int argc,char *argv[])
 	else
 	{
 		printf("Message not verified\n");
-		// for(int i=0;i<mlen;++i)
-		// {
-		// 	printf("%c",pt[i]);
-		// }
+		for(int i=0;i<mlen;++i)
+		{
+			printf("%c",pt[i]);
+		}
 	}
 	printf("\n"); // */
 	return 0;

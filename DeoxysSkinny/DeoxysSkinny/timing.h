@@ -1,5 +1,3 @@
-/* Code taken from https://github.com/kste/skinny_avx */
-
 #ifndef TIMING_H
 #define TIMING_H
 

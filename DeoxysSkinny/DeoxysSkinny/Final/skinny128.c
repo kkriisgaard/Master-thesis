@@ -1,10 +1,6 @@
 #include "Skinny128128AVX2.h"
 #include <string.h>
 
-/*
-Code based on https://github.com/kste/skinny_avx
-*/
-
 u256 the_key[32];
 
 extern void pack_key(u256 x[32], const unsigned char *in);

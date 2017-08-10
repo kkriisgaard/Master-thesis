@@ -203,14 +203,14 @@ int crypto_aead_encrypt(
 	u128 one = {0x0,0x0,0,0x0, 0x0,0x0,0x0,0x0, 0x0,0x0,0x0,0x0, 0x0,0x0,0x0,0x01}; // LOAD(i1); 
 	
 	// /*Check RHS first*/u128 h = _mm_set_epi8( 7,0,13,10, 11,4,1,14, 15,8,5,2, 3,12,9,6 );
-	u128 idx,tmp;
+	u128 idx,tmp,ctr;
 	u8 A_star[CRYPTO_KEYBYTES];
 	u8 M_star[CRYPTO_KEYBYTES];
 	
 	// Additional data
 	
 	/*Those that remain 8 are to be permuted*/
-	u128 eight[8],tweaks[8],xx[PARA-1],z_s[8][PARA-1],mes[PARA];
+	u128 eight[8],tweaks[8],xx[PARA-1],z_s[8][PARA-1],mes[PARA],tweaks_sin[8];
 	
 	// tmp = one;
 	tweaks[0] = ad_reg; 
@@ -224,11 +224,6 @@ int crypto_aead_encrypt(
 		for(j=1;j<PARA-1;++j){
 			
 			z_s[i][j] = ADD(one,z_s[i][j-1]);
-			/*z_s[i][2] = ADD(one,z_s[i][1]);
-			z_s[i][3] = ADD(one,z_s[i][2]);
-			z_s[i][4] = ADD(one,z_s[i][3]);
-			z_s[i][5] = ADD(one,z_s[i][4]);
-			z_s[i][6] = ADD(one,z_s[i][5]);*/
 		}
 		one = PERMUTE(one,h);
 		
@@ -242,7 +237,15 @@ int crypto_aead_encrypt(
 	
 	
 	z = 0;
-	for(i=0;i<numblocks_ad;i+=PARA)
+	
+	int t_off=0;
+	int fin_encr = numblocks_ad%4;
+	int sin = 1;
+	if(!fin_encr){
+		sin = 0;
+	}
+	// printf("%d\n",numblocks_ad-(4*sin));
+	for(i=0;i<numblocks_ad-(4*sin);i+=4)
 	{
 		for(j=0;j<PARA;++j){
 			mes[j] = LOAD(ad+(i+j)*CRYPTO_KEYBYTES);
@@ -279,7 +282,7 @@ int crypto_aead_encrypt(
 			
 			tweaks[0] = PERMUTE(tweaks[0],prop_mask);
 			tweaks[0] = ADD(tweaks[0],prop);
-			for(j=1;j<8;++j){ /*I know this is wrong, will fix later*/
+			for(j=1;j<8;++j){ 
 				tweaks[j] = PERMUTE(tweaks[j],h);
 			}
 		}
@@ -294,10 +297,124 @@ int crypto_aead_encrypt(
 	
 		for(j=0;j<PARA;++j){
 			auth =auth^mes[j];
+			
 		}
 		// auth = mes[0]^mes[1]^mes[2]^mes[3]^mes[4]^mes[5]^mes[6]^mes[7]^auth;
 	} 
-	if(fin_ad) 
+	
+	ctr = keys[15];
+	for(i=0;i<fin_encr;++i){
+		
+		if(t_off>0){ctr = z_s[0][t_off-1];}
+		tmp = keys[0]^(ctr^tweaks[0]);
+		mes[0] = LOAD(ad+(i+numblocks_ad-fin_encr)*CRYPTO_KEYBYTES);
+		mes[0] = tmp^mes[0];
+
+		tweaks_sin[0] = ctr^tweaks[0];
+		tweaks_sin[1] = PERMUTE(tweaks_sin[0],h);
+		tweaks_sin[2] = PERMUTE(tweaks_sin[1],h);
+		tweaks_sin[3] = PERMUTE(tweaks_sin[2],h);
+		tweaks_sin[4] = PERMUTE(tweaks_sin[3],h);
+		tweaks_sin[5] = PERMUTE(tweaks_sin[4],h);
+		tweaks_sin[6] = PERMUTE(tweaks_sin[5],h);
+		tweaks_sin[7] = PERMUTE(tweaks_sin[6],h);
+	
+		xx[0] = keys[1]^tweaks_sin[1];
+		xx[1] = keys[2]^tweaks_sin[2];
+		xx[2] = keys[3]^tweaks_sin[3];
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[0] = keys[4]^tweaks_sin[4];
+		xx[1] = keys[5]^tweaks_sin[5];
+		xx[2] = keys[6]^tweaks_sin[6];
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[0] = keys[7]^tweaks_sin[7];
+		xx[1] = keys[8]^tweaks_sin[0];
+		xx[2] = keys[9]^tweaks_sin[1];
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[0] = keys[10]^tweaks_sin[2];
+		xx[1] = keys[11]^tweaks_sin[3];
+		xx[2] = keys[12]^tweaks_sin[4];
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[1] = keys[13]^tweaks_sin[5];
+		xx[2] = keys[14]^tweaks_sin[6];
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		++t_off;
+		
+		auth = auth^mes[0];
+		print128_asint(auth);
+	}
+	
+	if(fin_ad)
+	{
+		memcpy(A_star,ad+numblocks_ad*CRYPTO_KEYBYTES,fin_ad);
+		A_star[fin_ad] = 0x80;
+		memset(A_star+fin_ad+1,0,CRYPTO_KEYBYTES-(fin_ad+1));
+		mes[0] = LOAD(A_star);
+		if(t_off>0){ctr = z_s[0][t_off-1];}
+		idx = tag_fin^(ctr^tweaks[0]) ; /* tweaks[0] = current index, since it is incremented at end*/
+		
+		tweaks[0] = idx; 
+		
+		tmp = (keys[0]^tweaks[0]); // Round key
+		idx = (tmp^mes[0]); 
+	
+		tweaks[1] = PERMUTE(tweaks[0],h); // Remember to reset tweaks
+		tweaks[2] = PERMUTE(tweaks[1],h);
+		tweaks[3] = PERMUTE(tweaks[2],h);
+		tweaks[4] = PERMUTE(tweaks[3],h);
+		tweaks[5] = PERMUTE(tweaks[4],h);
+		tweaks[6] = PERMUTE(tweaks[5],h);
+		tweaks[7] = PERMUTE(tweaks[6],h);
+	
+		tmp = keys[1]^tweaks[1]; 
+		idx = ENC(idx,tmp);
+		tmp = keys[2]^tweaks[2]; 
+		idx = ENC(idx,tmp);
+		tmp = keys[3]^tweaks[3]; 
+		idx = ENC(idx,tmp);
+		tmp = keys[4]^tweaks[4]; 
+		idx = ENC(idx,tmp);
+		tmp = keys[5]^tweaks[5]; 
+		idx = ENC(idx,tmp);
+		tmp = keys[6]^tweaks[6]; 
+		idx = ENC(idx,tmp);
+		tmp = keys[7]^tweaks[7]; 
+		idx = ENC(idx,tmp);
+		tmp = keys[8]^tweaks[0]; 
+		idx = ENC(idx,tmp);
+		tmp = keys[9]^tweaks[9]; 
+		idx = ENC(idx,tmp);
+		tmp = keys[10]^tweaks[10]; 
+		idx = ENC(idx,tmp);
+		tmp = keys[11]^tweaks[11]; 
+		idx = ENC(idx,tmp);
+		tmp = keys[12]^tweaks[12]; 
+		idx = ENC(idx,tmp);
+		tmp = keys[13]^tweaks[13]; 
+		idx = ENC(idx,tmp);
+		tmp = keys[14]^tweaks[14]; 
+		idx = ENC(idx,tmp);
+	
+		/* end of encrypt_block*/
+		
+		auth = idx^auth;
+	}
+	
+	
+	/*if(fin_ad) 
 	{
 		memcpy(A_star,ad+numblocks_ad*CRYPTO_KEYBYTES,fin_ad);
 		A_star[fin_ad] = 0x80;
@@ -306,7 +423,6 @@ int crypto_aead_encrypt(
 		idx = tweaks[0]^tag_fin; // tweaks[0] = current index, since it is incremented at end
 		// tmp = encrypt_block(mes[0],idx);
 		
-		/* Start of encrypt_block. To encrypt: mes[0] with tweak idx. This will be a slow f*cker. */
 		
 		tweaks[0] = idx; 
 		
@@ -328,10 +444,9 @@ int crypto_aead_encrypt(
 		}
 	
 	
-		/* end of encrypt_block*/
 		
 		auth = auth^idx; // auth =  _mm_xor_si128(auth,idx);
-	}
+	}*/
 
 	// Tag generation
 	
@@ -345,8 +460,14 @@ int crypto_aead_encrypt(
 	u128 tag = auth; 
 
 	// idx = zero;
+	t_off=0;
+	fin_encr = numblocks_mes%4;
+	sin = 1;
+	if(!fin_encr){
+		sin = 0;
+	}
 	z = 0;
-	for(i=0;i<numblocks_mes;i+=PARA) 
+	for(i=0;i<(numblocks_mes-4*sin);i+=4)  
 	{
 		for(j=0;j<PARA;++j){
 			mes[j] = LOAD(m+(i+j)*CRYPTO_KEYBYTES);
@@ -406,8 +527,119 @@ int crypto_aead_encrypt(
 			tag = tag^mes[j];
 		}
 	}
+	ctr = keys[15];
+	for(i=0;i<fin_encr;++i){
+		if(t_off>0){ctr = z_s[0][t_off-1];}
+		tmp = keys[0]^(ctr^tweaks[0]);
+		mes[0] = LOAD(m+(i+numblocks_mes-fin_encr)*CRYPTO_KEYBYTES);
+		mes[0] = tmp^mes[0];
+
+		tweaks_sin[0] = ctr^tweaks[0];
+		tweaks_sin[1] = PERMUTE(tweaks_sin[0],h);
+		tweaks_sin[2] = PERMUTE(tweaks_sin[1],h);
+		tweaks_sin[3] = PERMUTE(tweaks_sin[2],h);
+		tweaks_sin[4] = PERMUTE(tweaks_sin[3],h);
+		tweaks_sin[5] = PERMUTE(tweaks_sin[4],h);
+		tweaks_sin[6] = PERMUTE(tweaks_sin[5],h);
+		tweaks_sin[7] = PERMUTE(tweaks_sin[6],h);
+	
+		xx[0] = keys[1]^tweaks_sin[1];
+		xx[1] = keys[2]^tweaks_sin[2];
+		xx[2] = keys[3]^tweaks_sin[3];
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[0] = keys[4]^tweaks_sin[4];
+		xx[1] = keys[5]^tweaks_sin[5];
+		xx[2] = keys[6]^tweaks_sin[6];
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[0] = keys[7]^tweaks_sin[7];
+		xx[1] = keys[8]^tweaks_sin[0];
+		xx[2] = keys[9]^tweaks_sin[1];
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[0] = keys[10]^tweaks_sin[2];
+		xx[1] = keys[11]^tweaks_sin[3];
+		xx[2] = keys[12]^tweaks_sin[4];
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[0] = keys[13]^tweaks_sin[5];
+		xx[1] = keys[14]^tweaks_sin[6];
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		++t_off;
+		
+		tag = tag^mes[0];
+	}
 	
 	if(fin_mes) 
+	{
+		memcpy(M_star,m+numblocks_mes*CRYPTO_KEYBYTES,fin_mes);
+		M_star[fin_mes] = 0x80;
+		memset(M_star+fin_mes+1,0,CRYPTO_KEYBYTES-(fin_mes+1));
+		mes[0] = LOAD(M_star);
+		if(t_off>0){ctr = z_s[0][t_off-1];}
+		idx = tag_fin^(ctr^tweaks[0]);
+		
+		tweaks_sin[0] = idx; /*I don't remember the rationale behind this, but I'm afraid to remove it.*/
+		
+		tmp = keys[0]^tweaks_sin[0]; // Round key
+		idx = tmp^mes[0]; // Counting coppers
+		
+		
+		tweaks_sin[1] = PERMUTE(tweaks_sin[0],h); 
+		tweaks_sin[2] = PERMUTE(tweaks_sin[1],h);
+		tweaks_sin[3] = PERMUTE(tweaks_sin[2],h);
+		tweaks_sin[4] = PERMUTE(tweaks_sin[3],h);
+		tweaks_sin[5] = PERMUTE(tweaks_sin[4],h);
+		tweaks_sin[6] = PERMUTE(tweaks_sin[5],h);
+		tweaks_sin[7] = PERMUTE(tweaks_sin[6],h);
+		
+		xx[0] = keys[1]^tweaks_sin[1];
+		xx[1] = keys[2]^tweaks_sin[2];
+		xx[2] = keys[3]^tweaks_sin[3];
+		idx = ENC(idx,xx[0]);
+		idx = ENC(idx,xx[1]);
+		idx = ENC(idx,xx[2]);
+	
+		xx[0] = keys[4]^tweaks_sin[4];
+		xx[1] = keys[5]^tweaks_sin[5];
+		xx[2] = keys[6]^tweaks_sin[6];
+		idx = ENC(idx,xx[0]);
+		idx = ENC(idx,xx[1]);
+		idx = ENC(idx,xx[2]);
+	
+		xx[0] = keys[7]^tweaks_sin[7];
+		xx[1] = keys[8]^tweaks_sin[0];
+		xx[2] = keys[9]^tweaks_sin[1];
+		idx = ENC(idx,xx[0]);
+		idx = ENC(idx,xx[1]);
+		idx = ENC(idx,xx[2]);
+	
+		xx[0] = keys[10]^tweaks_sin[2];
+		xx[1] = keys[11]^tweaks_sin[3];
+		xx[2] = keys[12]^tweaks_sin[4];
+		idx = ENC(idx,xx[0]);
+		idx = ENC(idx,xx[1]);
+		idx = ENC(idx,xx[2]);
+	
+		xx[0] = keys[13]^tweaks_sin[5];
+		xx[1] = keys[14]^tweaks_sin[6];
+		idx = ENC(idx,xx[0]);
+		idx = ENC(idx,xx[1]);
+
+		tag = tag^idx;
+		
+	}
+	/*if(fin_mes) 
 	{
 		memcpy(M_star,m+numblocks_mes*CRYPTO_KEYBYTES,fin_mes);
 		M_star[fin_mes] = 0x80;
@@ -416,7 +648,6 @@ int crypto_aead_encrypt(
 		idx = tag_fin^tweaks[0]; //  _mm_xor_si128(tag_fin,tweaks[0]);
 
 		
-		/* Start of encrypt_block. To encrypt: mes[0] with tweak idx. This will be a slow f*cker. */
 				
 		tweaks[0] = idx; 
 		
@@ -442,7 +673,7 @@ int crypto_aead_encrypt(
 		
 		tag = tag^idx; //  _mm_xor_si128(tag,idx);
 		
-	}
+	}*/
 
 	/* end of encrypt_block*/
 	tag = encr_one_block(tag,nonce);
@@ -457,11 +688,15 @@ int crypto_aead_encrypt(
 		tweaks[i] = keys[15]; // zero; 
 	}
 
-	for(i=0;i<15;++i)
+	for(i=0;i<7;++i)
 	{
-		keys[i] = keys[i]^one_tag; //  _mm_xor_si128(keys[i],one_tag);
+		keys[i] = (keys[i]^one_tag);
+		keys[i+8] = (keys[i+8]^one_tag);
 		one_tag = PERMUTE(one_tag,h);
 	} // */ 
+	
+	keys[7] = (keys[7]^one_tag); /*Getting rid of a shuffle and pipelining some xor's*/
+	one_tag = PERMUTE(one_tag,h);
 	
 	// Encryption
 	
@@ -470,8 +705,8 @@ int crypto_aead_encrypt(
 	z = 0;
 	// idx = zero; // keys[15];
 	// printf("Nonce at enc loop ");print128_asint(nonce);
-	
-	for(i=0;i<numblocks_mes;i+=PARA)
+	t_off = 0;
+	for(i=0;i<(numblocks_mes-sin*4);i+=PARA)
 	{
 		
 		tmp = tweaks[0]^keys[0]; 
@@ -526,7 +761,123 @@ int crypto_aead_encrypt(
 			++z;
 		} // */		
 	}
-	if(fin_mes) // Not sure what to do in this case. Until further notice, I'll just do 10* padding.
+	
+	ctr = keys[15];
+	for(i=0;i<fin_encr;++i){
+		
+		if(t_off>0){ctr = z_s[0][t_off-1];}
+		tmp = keys[0]^(ctr^tweaks[0]);
+		
+		N[0] = tmp^nonce;
+		mes[0] = LOAD(m+(i+numblocks_mes-fin_encr)*CRYPTO_KEYBYTES);
+
+		tweaks_sin[0] = (ctr^tweaks[0]);
+		tweaks_sin[1] = PERMUTE(tweaks_sin[0],h);
+		tweaks_sin[2] = PERMUTE(tweaks_sin[1],h);
+		tweaks_sin[3] = PERMUTE(tweaks_sin[2],h);
+		tweaks_sin[4] = PERMUTE(tweaks_sin[3],h);
+		tweaks_sin[5] = PERMUTE(tweaks_sin[4],h);
+		tweaks_sin[6] = PERMUTE(tweaks_sin[5],h);
+		tweaks_sin[7] = PERMUTE(tweaks_sin[6],h);
+	
+		xx[0] = keys[1]^tweaks_sin[1];
+		xx[1] = keys[2]^tweaks_sin[2];
+		xx[2] = keys[3]^tweaks_sin[3];
+		N[0] = ENC(N[0],xx[0]);
+		N[0] = ENC(N[0],xx[1]);
+		N[0] = ENC(N[0],xx[2]);
+	
+		xx[0] = keys[4]^tweaks_sin[4];
+		xx[1] = keys[5]^tweaks_sin[5];
+		xx[2] = keys[6]^tweaks_sin[6];
+		N[0] = ENC(N[0],xx[0]);
+		N[0] = ENC(N[0],xx[1]);
+		N[0] = ENC(N[0],xx[2]);
+	
+		xx[0] = keys[7]^tweaks_sin[7];
+		xx[1] = keys[8]^tweaks_sin[0];
+		xx[2] = keys[9]^tweaks_sin[1];
+		N[0] = ENC(N[0],xx[0]);
+		N[0] = ENC(N[0],xx[1]);
+		N[0] = ENC(N[0],xx[2]);
+	
+		xx[0] = keys[10]^tweaks_sin[2];
+		xx[1] = keys[11]^tweaks_sin[3];
+		xx[2] = keys[12]^tweaks_sin[4];
+		N[0] = ENC(N[0],xx[0]);
+		N[0] = ENC(N[0],xx[1]);
+		N[0] = ENC(N[0],xx[2]);
+	
+		xx[0] = keys[13]^tweaks_sin[5];
+		xx[1] = keys[14]^tweaks_sin[6];
+		N[0] = ENC(N[0],xx[0]);
+		N[0] = ENC(N[0],xx[1]);
+		++t_off;
+		
+		mes[0] = N[0]^mes[0];
+		STORE( c+((i+numblocks_mes-fin_encr)*CRYPTO_KEYBYTES), mes[0] );
+	}
+	
+	if(fin_mes) 
+	{
+		memcpy(M_star,m+numblocks_mes*CRYPTO_KEYBYTES,fin_mes);
+		M_star[fin_mes] = 0x80;
+		memset(M_star+fin_mes+1,0,CRYPTO_KEYBYTES-(fin_mes+1));
+		mes[0] = LOAD(M_star);
+		
+		if(t_off>0){ctr = z_s[0][t_off-1];}
+		tweaks[0] = (ctr^tweaks[0]); 
+		
+		tmp = (keys[0]^tweaks[0]); // Round key
+		idx = (tmp^nonce); // Counting coppers
+	
+		tweaks[1] = PERMUTE(tweaks[0],h); 
+		tweaks[2] = PERMUTE(tweaks[1],h);
+		tweaks[3] = PERMUTE(tweaks[2],h);
+		tweaks[4] = PERMUTE(tweaks[3],h);
+		tweaks[5] = PERMUTE(tweaks[4],h);
+		tweaks[6] = PERMUTE(tweaks[5],h);
+		tweaks[7] = PERMUTE(tweaks[6],h);
+	
+		xx[0] = keys[1]^tweaks_sin[1];
+		xx[1] = keys[2]^tweaks_sin[2];
+		xx[2] = keys[3]^tweaks_sin[3];
+		idx = ENC(idx,xx[0]);
+		idx = ENC(idx,xx[1]);
+		idx = ENC(idx,xx[2]);
+	
+		xx[0] = keys[4]^tweaks_sin[4];
+		xx[1] = keys[5]^tweaks_sin[5];
+		xx[2] = keys[6]^tweaks_sin[6];
+		idx = ENC(idx,xx[0]);
+		idx = ENC(idx,xx[1]);
+		idx = ENC(idx,xx[2]);
+	
+		xx[0] = keys[7]^tweaks_sin[7];
+		xx[1] = keys[8]^tweaks_sin[0];
+		xx[2] = keys[9]^tweaks_sin[1];
+		idx = ENC(idx,xx[0]);
+		idx = ENC(idx,xx[1]);
+		idx = ENC(idx,xx[2]);
+	
+		xx[0] = keys[10]^tweaks_sin[2];
+		xx[1] = keys[11]^tweaks_sin[3];
+		xx[2] = keys[12]^tweaks_sin[4];
+		idx = ENC(idx,xx[0]);
+		idx = ENC(idx,xx[1]);
+		idx = ENC(idx,xx[2]);
+	
+		xx[0] = keys[13]^tweaks_sin[5];
+		xx[1] = keys[14]^tweaks_sin[6];
+		idx = ENC(idx,xx[0]);
+		idx = ENC(idx,xx[1]);
+			
+		mes[0] = mes[0]^idx;
+
+		STORE( C_star, mes[0] ); 
+		memcpy(c+numblocks_mes*CRYPTO_KEYBYTES,C_star,fin_mes);
+	}
+	/*if(fin_mes) // Not sure what to do in this case. Until further notice, I'll just do 10* padding.
 	{
 		memcpy(M_star,m+numblocks_mes*CRYPTO_KEYBYTES,fin_mes);
 		M_star[fin_mes] = 0x80;
@@ -557,7 +908,7 @@ int crypto_aead_encrypt(
 		mes[0] = mes[0]^idx; 
 		STORE( C_star, mes[0] ); 
 		memcpy(c+numblocks_mes*CRYPTO_KEYBYTES,C_star,fin_mes);
-	}
+	}*/
 	*clen = mlen+CRYPTO_ABYTES;
 	return 0;
 }
@@ -605,14 +956,14 @@ int crypto_aead_decrypt(
 	u128 prop    = LOAD(prop_a); //  _mm_set_epi8(0x0,0x0,0x0,0x0, 0x0,0x0,0x0,0x0, 0x80,0x0,0x0,0x0  ,0x0,0x0,0x0,0x0);
 	u8 prop_ma[16] = {0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,  0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07};
 	u128 prop_mask = LOAD(prop_ma); //  _mm_set_epi8(8,9,10,11,12,13,14,15,  0,1,2,3,4,5,6,7  );
-	u128 A,idx,M,C,tmp;
+	u128 A,idx,M,C,tmp,ctr;
 	unsigned char A_star[CRYPTO_KEYBYTES];
 	unsigned char M_star[CRYPTO_KEYBYTES];
 	unsigned char tmp_ar[CRYPTO_KEYBYTES];
 	unsigned long long nbm = numblocks_cip-1;
 	int z = 0;
 	// printf("Declaring u128 arrays\n");
-	u128 tweaks[8],z_s[8][PARA-1],eight[8],xx[PARA-1],mes[PARA],N[PARA];
+	u128 tweaks[8],z_s[8][PARA-1],eight[8],xx[PARA-1],mes[PARA],N[PARA],tweaks_sin[8];
 	
 	u128 auth = keys[15];
 	
@@ -660,9 +1011,15 @@ int crypto_aead_decrypt(
 	idx = keys[15]; // keys[15];
 	
 	z = 0;
-	// printf("Entering decr loop\n");
-	// printf("Nonce at dec loop ");print128_asint(nonce);
-	for(i=0;i<nbm;i+=PARA)
+	
+	int t_off=0;
+	int fin_encr = nbm%4;
+	int sin = 1;
+	if(!fin_encr){
+		sin = 0;
+	}
+	
+	for(i=0;i<(nbm-PARA*sin);i+=PARA)
 	{
 		tmp = tweaks[0]^keys[0];  // _mm_xor_si128(tweaks[0] ,keys[0]);
 		
@@ -717,28 +1074,92 @@ int crypto_aead_decrypt(
 			++z;
 		} // */		
 	}
+	
+	ctr = keys[15];
+	for(i=0;i<fin_encr;++i){
+		if(t_off>0){ctr = z_s[0][t_off-1];}
+		tmp = (keys[0]^(ctr^tweaks[0]) );
+		
+		N[0] = (tmp^nonce);
+		mes[0] = LOAD(c+(i+nbm-fin_encr)*CRYPTO_KEYBYTES);
+				
+		tweaks_sin[0] = (ctr^tweaks[0]);
+		tweaks_sin[1] = PERMUTE(tweaks_sin[0],h);
+		tweaks_sin[2] = PERMUTE(tweaks_sin[1],h);
+		tweaks_sin[3] = PERMUTE(tweaks_sin[2],h);
+		tweaks_sin[4] = PERMUTE(tweaks_sin[3],h);
+		tweaks_sin[5] = PERMUTE(tweaks_sin[4],h);
+		tweaks_sin[6] = PERMUTE(tweaks_sin[5],h);
+		tweaks_sin[7] = PERMUTE(tweaks_sin[6],h);
+	
+		xx[0] = (keys[1]^tweaks_sin[1]);
+		xx[1] = (keys[2]^tweaks_sin[2]);
+		xx[2] = (keys[3]^tweaks_sin[3]);
+		N[0] = ENC(N[0],xx[0]);
+		N[0] = ENC(N[0],xx[1]);
+		N[0] = ENC(N[0],xx[2]);
+	
+		xx[0] = (keys[4]^tweaks_sin[4]);
+		xx[1] = (keys[5]^tweaks_sin[5]);
+		xx[2] = (keys[6]^tweaks_sin[6]);
+		N[0] = ENC(N[0],xx[0]);
+		N[0] = ENC(N[0],xx[1]);
+		N[0] = ENC(N[0],xx[2]);
+	
+		xx[0] = (keys[7]^tweaks_sin[7]);
+		xx[1] = (keys[8]^tweaks_sin[0]);
+		xx[2] = (keys[9]^tweaks_sin[1]);
+		N[0] = ENC(N[0],xx[0]);
+		N[0] = ENC(N[0],xx[1]);
+		N[0] = ENC(N[0],xx[2]);
+	
+		xx[0] = (keys[10]^tweaks_sin[2]);
+		xx[1] = (keys[11]^tweaks_sin[3]);
+		xx[2] = (keys[12]^tweaks_sin[4]);
+		N[0] = ENC(N[0],xx[0]);
+		N[0] = ENC(N[0],xx[1]);
+		N[0] = ENC(N[0],xx[2]);
+	
+		xx[0] = (keys[13]^tweaks_sin[5]);
+		xx[1] = (keys[14]^tweaks_sin[6]);
+		N[0] = ENC(N[0],xx[0]);
+		N[0] = ENC(N[0],xx[1]);
+		++t_off;
+		
+		mes[0] = (N[0]^mes[0]);
+		STORE( m+((i+nbm-fin_encr)*CRYPTO_KEYBYTES), mes[0] );
+		
+	}
+	
 	if(fin_cip) 
 	{
 		memcpy(M_star,c+nbm*CRYPTO_KEYBYTES,fin_cip); 
+		
 		M = LOAD(M_star);
-		// printf("First time at one_block\n");
-		C = M^(encr_one_block(nonce,(tag1^idx))); //  _mm_xor_si128(M,encrypt_block(nonce, _mm_xor_si128(tag1,idx) ) );
-		STORE( tmp_ar, C ); // (/*Remember to double check*/u128 *)&
-		memcpy(m+nbm*CRYPTO_KEYBYTES,tmp_ar,fin_cip); 
+		
+		if(t_off>0){ctr = z_s[0][t_off-1];}
+		idx = (ctr^tweaks[0]);
+		
+		C = M^(encr_one_block(nonce,(tag1^idx)));
+		STORE( tmp_ar, C ); 
+		memcpy(m+nbm*CRYPTO_KEYBYTES,tmp_ar,fin_cip);  
 	}
-	
-	
+		
 	
 	// Associated data
 	
 	tag1 = tag | MSB1; // _mm_or_si128(tag,MSB1); /* Untagging the nonce */
 	// printf("tag1, all the way: ");print128_asint(tag1);
 	
-	for(i=0;i<15;++i)
+	for(i=0;i<7;++i)
 	{
-		keys[i] = keys[i]^tag1; //  _mm_xor_si128(keys[i],tag1);
+		keys[i] = (keys[i]^tag1);
+		keys[i+8] = (keys[i+8]^tag1);
 		tag1 = PERMUTE(tag1,h);
-	} 
+	} // */ 
+	
+	keys[7] = (keys[7]^tag1); /*Getting rid of a shuffle and pipelining some xor's*/
+	tag1 = PERMUTE(tag1,h);
 	
 	tweaks[0] = ad_reg; /*Tweak reset*/
 	for(i=1;i<8;++i){
@@ -746,9 +1167,14 @@ int crypto_aead_decrypt(
 	}
 	
 		
+	fin_encr = numblocks_ad%4;
+	sin = 1;
+	if(!fin_encr){
+		sin = 0;
+	}
 	z = 0;
-	
-	for(i=0;i<numblocks_ad;i+=PARA)
+	// printf("%d\n",numblocks_ad);
+	for(i=0;i<numblocks_ad-(4*sin);i+=4)
 	{
 		for(j=0;j<PARA;++j){
 			mes[j] = LOAD(ad+(i+j)*CRYPTO_KEYBYTES);
@@ -800,11 +1226,82 @@ int crypto_aead_decrypt(
 	
 		for(j=0;j<PARA;++j){
 			auth = auth^mes[j]; 
+			
 		}
 		
 	}
 	
-	if(fin_ad) 
+	ctr = keys[15];
+	for(i=0;i<fin_encr;++i){
+	
+		if(t_off>0){
+			ctr = z_s[0][t_off-1];
+		}
+		
+		tmp = (keys[0]^(ctr^tweaks[0]) );
+		mes[0] = LOAD(ad+(i+numblocks_ad-fin_encr)*CRYPTO_KEYBYTES);
+		mes[0] = (tmp^mes[0]);
+
+		tweaks_sin[0] = (ctr^tweaks[0]);
+		tweaks_sin[1] = PERMUTE(tweaks_sin[0],h);
+		tweaks_sin[2] = PERMUTE(tweaks_sin[1],h);
+		tweaks_sin[3] = PERMUTE(tweaks_sin[2],h);
+		tweaks_sin[4] = PERMUTE(tweaks_sin[3],h);
+		tweaks_sin[5] = PERMUTE(tweaks_sin[4],h);
+		tweaks_sin[6] = PERMUTE(tweaks_sin[5],h);
+		tweaks_sin[7] = PERMUTE(tweaks_sin[6],h);
+	
+		xx[0] = (keys[1]^tweaks_sin[1]);
+		xx[1] = (keys[2]^tweaks_sin[2]);
+		xx[2] = (keys[3]^tweaks_sin[3]);
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[0] = (keys[4]^tweaks_sin[4]);
+		xx[1] = (keys[5]^tweaks_sin[5]);
+		xx[2] = (keys[6]^tweaks_sin[6]);
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[0] = (keys[7]^tweaks_sin[7]);
+		xx[1] = (keys[8]^tweaks_sin[0]);
+		xx[2] = (keys[9]^tweaks_sin[1]);
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[0] = (keys[10]^tweaks_sin[2]);
+		xx[1] = (keys[11]^tweaks_sin[3]);
+		xx[2] = (keys[12]^tweaks_sin[4]);
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[0] = (keys[13]^tweaks_sin[5]);
+		xx[1] = (keys[14]^tweaks_sin[6]);
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		++t_off;
+		
+		auth = (auth^mes[0]);
+		print128_asint(auth);
+	}
+	
+	if(fin_ad)
+	{
+		memcpy(A_star,ad+numblocks_ad*CRYPTO_KEYBYTES,fin_ad);
+		A_star[fin_ad] = 0x80;
+		memset(A_star+fin_ad+1,0,CRYPTO_KEYBYTES-(fin_ad+1));
+		A = LOAD(A_star);
+		if(t_off>0){ctr = z_s[0][t_off-1];}
+		idx = (tag_fin^(ctr^tweaks[0]));
+		tmp = encr_one_block(A,idx);
+		auth = (auth^tmp);
+	}
+	
+	/*if(fin_ad) 
 	{
 		memcpy(A_star,ad+numblocks_ad*CRYPTO_KEYBYTES,fin_ad);
 		A_star[fin_ad] = 0x80;
@@ -816,7 +1313,7 @@ int crypto_aead_decrypt(
 		// print128_asint(idx);
 		tmp = encr_one_block(A,idx); // encrypt_block(A,idx,keys);
 		auth = auth^tmp; // _mm_xor_si128(auth,tmp);
-	}
+	}*/
 	// printf("Printing auth, decr\n");
 	// print128_asint(auth);
 	
@@ -835,10 +1332,15 @@ int crypto_aead_decrypt(
 	
 	idx = keys[15];
 	z=0;
+	t_off=0;
+	fin_encr = nbm%4;
+	sin = 1;
+	if(!fin_encr){
+		sin = 0;
+	}
+	tagp = auth;
 	
-	// printf("Entering ver loop\n");
-	// print128_asint(tagp);
-	for(i=0;i<nbm;i+=PARA) 
+	for(i=0;i<(nbm-4*sin);i+=4) 
 	{
 		for(j=0;j<PARA;++j){
 			mes[j] = LOAD(m+(i+j)*CRYPTO_KEYBYTES);
@@ -893,10 +1395,81 @@ int crypto_aead_decrypt(
 		
 
 	}
+	
+	ctr = keys[15];
+	for(i=0;i<fin_encr;++i){
+		
+		if(t_off>0){ctr = z_s[0][t_off-1];}
+		
+		tmp = (keys[0]^(ctr^tweaks[0]) );
+		mes[0] = LOAD(m+(i+nbm-fin_encr)*CRYPTO_KEYBYTES);
+		mes[0] = (tmp^mes[0]);
+		
+		
+
+		tweaks_sin[0] = (ctr^tweaks[0]);
+		tweaks_sin[1] = PERMUTE(tweaks_sin[0],h);
+		tweaks_sin[2] = PERMUTE(tweaks_sin[1],h);
+		tweaks_sin[3] = PERMUTE(tweaks_sin[2],h);
+		tweaks_sin[4] = PERMUTE(tweaks_sin[3],h);
+		tweaks_sin[5] = PERMUTE(tweaks_sin[4],h);
+		tweaks_sin[6] = PERMUTE(tweaks_sin[5],h);
+		tweaks_sin[7] = PERMUTE(tweaks_sin[6],h);
+	
+		xx[0] = (keys[1]^tweaks_sin[1]);
+		xx[1] = (keys[2]^tweaks_sin[2]);
+		xx[2] = (keys[3]^tweaks_sin[3]);
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[0] = (keys[4]^tweaks_sin[4]);
+		xx[1] = (keys[5]^tweaks_sin[5]);
+		xx[2] = (keys[6]^tweaks_sin[6]);
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[0] = (keys[7]^tweaks_sin[7]);
+		xx[1] = (keys[8]^tweaks_sin[0]);
+		xx[2] = (keys[9]^tweaks_sin[1]);
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[0] = (keys[10]^tweaks_sin[2]);
+		xx[1] = (keys[11]^tweaks_sin[3]);
+		xx[2] = (keys[12]^tweaks_sin[4]);
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		mes[0] = ENC(mes[0],xx[2]);
+	
+		xx[0] = (keys[13]^tweaks_sin[5]);
+		xx[1] = (keys[14]^tweaks_sin[6]);
+		mes[0] = ENC(mes[0],xx[0]);
+		mes[0] = ENC(mes[0],xx[1]);
+		++t_off;
+		
+		tagp = (tagp^mes[0]);
+	}
+	if(fin_cip)
+	{
+		memcpy(M_star,m+nbm*CRYPTO_KEYBYTES,fin_cip);
+		M_star[fin_cip] = 0x80;
+		memset(M_star+fin_cip+1,0,CRYPTO_KEYBYTES-(fin_cip+1));
+		M = LOAD(M_star); 
+		if(t_off>0){ctr = z_s[0][t_off-1];}
+		idx = (tag_fin^(ctr^tweaks[0]) );
+		
+		tmp = encr_one_block(M,idx); 
+		
+		tagp = (tagp^tmp);
+		
+	}
 	// tagp = tagp^auth; // _mm_xor_si128(tagp,auth);
 	// printf("After general round\n");
 	// print128_asint(tagp);
-	if(fin_cip)
+	/*if(fin_cip)
 	{
 		memcpy(M_star,m+nbm*CRYPTO_KEYBYTES,fin_cip);
 		M_star[fin_cip] = 0x80;
@@ -912,7 +1485,7 @@ int crypto_aead_decrypt(
 
 		tagp = tagp^tmp; // _mm_xor_si128(tagp,tmp);
 		
-	}// 
+	}// */
 	nonce_arr[0] = 0x10;
 	nonce = LOAD(nonce_arr); // _mm_set_epi8(0x10,npub[14],npub[13],npub[12],npub[11],npub[10],npub[9],npub[8],npub[7],npub[6],npub[5],npub[4],npub[3],npub[2],npub[1],npub[0]);
 	
@@ -939,7 +1512,7 @@ int crypto_aead_decrypt(
 }
 
 
-#define LENGTH 16384
+#define LENGTH 165
 
 int main(){
 
@@ -947,39 +1520,33 @@ int main(){
 	int i;
 	
 	u64 mlen = LENGTH;
-	u8 pt[LENGTH] = "aybvinavxpsiolguzzgzptzevbqkmhmogpjqflmcaekqpsmrsssjlsnjvetjnhxvxgmetygveslwlynfqhoezenwkifxqctnkhtdhzalrmhekwlcecifgxcqghpwmilwrecyfckyotdasqfysnfylhqtripfqcbkifiniulyqqziheiztnagxszqaovtsydaennoibmyrniatqcndetayvqzjnuemzesmugwxuuqierbuvqyzmaxhtysguwstdmizsgwnboxhhyccrcbdczkvzeeubynglxfdedshtpobqsdhufkzgwuhaabdzrlkosnuxibrxssnkxuhcggkecshdvkcmymdqbxolbfjtzyfwtmbbungzfpcbbgpzusqxqejrlsmkqtglijpcxxbcmffnlvnfpddfjmyugkeyemkmyzqvwszkxfxlckqrpvzyjxupkyoonaclbsgzmhjmogxstpkilljwidoseeitemefhmgtvpfkxecquobhzkfkptetxpmdbskigqecflmdqqvmfwveiaqyuvrtkgxlyhwhyalfnzifpgrucoblprjloceykbkjlisjkdoxczdtfwqjlrwckhnzkrxuvjfgtzrdchdgiicneszrlvtxdiwncwjxhrfbqygvfjdorfdyzcrkylidvgqxebwmubplzxihjlvataasdsfdfngavyyabuowyfhzcpglcdoxeoqjivmnkuofsohtivpiayifpoquugryvjjfgvtqrjyjxhefdwqfwykmodiijzigjrmpohifqiqnpvuutkcpiodzrljdlslwlxnagxhwfylxvgtosvfdkjcdulihfudrtrtaoaywakvvqolkmtnycpdwdmeigjbbcubrxapxmkveaiombckftocwaifitgjwdnpapezbqwhqhvdizpotdspfcwpxfbtiqikfolieipxpmazmrphxjyenvulcxeknpwsfhckptjgflitczczjbeyyajaxqmkhiempgyfzhngsvcvxewghcgfcqhzitlpbpbrvaywjlfcjhzgnxoxauecmmeufpljfpacrazaneewndecbuzbrgffsjczznieckitkhwynawcgdfjzgmqmrygbaicpqiudqpnylnnoksupzdofphuifcjhknydvsgmivmvjbjttdksiyazhuimytvjhuocmuqwpcsyedtzjdsresrlozamsvxbrlegfucxzwxfcrelwyeaqvoewotrlssdeyjltnkumibozfzxedawbodzeyqrqlwujhievsyhabxbhybndblerogvoyofjlbtsjxpeyyezviitjxxklddblaqkovtzwougojkmiqndyyzjxyvidykpyaznxuotjibxsnlagafgyeqycligmsxkuwztqonbyqyqejsmmasmeikjwtrinqukmwdemsikjgdpsxbextqeedpcyimlygxmcbsqtabehetbdwhbqxfwcwyaekmcsloxmgnihooquityeabwzguccscgcqkxcyuqghapyphszasfctccbygdrilvbxsfxmxgwyvupfoohhtkaxocwuhnevkfudmsrkynkvhzawnifiufgkjcetrkqdskgecyqanayvzytoiyxefdorhukafadxkmbpmsrzupuuqpiypffvktorqytvaxsmlvbxpvwkkteaiobawgvgblarjtolsgzdebatyzdksjncyocwwzczkctvyhgqqgwujynhxttpcgscuuyswdsgfncfukwksugbsukqpeftkzwhwwbszvyhicmfnkpfewjzsvphbucmwyvsxwkyukhcnwhcizjpxuorqdarzcfvdcnabzavkixzehdmgoddjrubuwuuycrbehbfgcasmatshygpnkuybqbwmvskxjmcspjztmtfmnxvlemaogarwbnizhuwtgalykmrygzktwhgctjsblkxnzhmhdkamlnkxabvgahbzqjblsumegjtfshmvrohectbevykxhnyxwcirywxefqjzxwxqmevoyyuvzeugrvgqxqhvnezuwiwvgtltzijzjewikrqeoyulpbiehhadrwaapnvrygqhmnrxghbuivfzypdhwdmpcmrtbokzvbghozewjhqrexqemvlkaxbcltwnhgmcjvmzwqvfalweiojujwekuimhbkwktjncgbccrzitlgyvxjsgfysbghjjrfumqjpyktddsnxftvdqgxzlvrneaynufhgyqxwaqzelmbsiyxaeubrqvguvehpmrykhvikokqzwttgtrjxlmqdhxzfdjwpaubjqkveulfseabxrmwfyniiminprlhtgicyuyeqlljslmpfyokwduepetexfnsnwvnsvtjiesaresyegkajhhylcelhsdwqalixergklgcrycvgnypufphjustowpewbmufgasriwjjygpnehhlwpvsjogffkegzyofagykcjtaqjousxioodhytpfycjfbjvilbgwfqphiaxesvmjlpslihrjjcommjuxmdvrtladnyhivurgljswslfcnvqzglzsouljhnmvltfgpwpdhhzzugdhbujjhidveogodsjpnqxfmmivvjurpazswibdseawugkxavonlmuzacuynrpcrqwnyxsqbspxyzvyxjnixikameacxpeogddgavxenmbnnylkkbvjlhjzljbjbgzjjfrlaopqctdstpedqzndgycukefnmgyxlpimgaeivhcowhuoijrrhuntasgmagjmwractemolpfkwzaeiuxroknqcvcfclryeraaxmoidvuzuvgepdyfolvsgzxkkqiqjkqgzhrccnexikdzpbefobyvaxhmqqdzctibazedmkcxufwlhdrxershqatgswgusoyupexdobckhzvqemnkfirwklcejkabyyypcvvqzxciyyacmpnsxeqjrsndfogdoevrcqjbnmjmmjqyydsykihddxginnnbtkuvaewqshceqscryxrkhankxuumjkqcukaxqwniermwlrpjqgtxhjkgfetqqjslvsimrxuxojvzallqtgpcrzjwgemwphjkbrwsqrreangcatuvblytlhprlepalzmmsjfjcynclvgnqcjsnhlaqcrdghfrgrgyanjclxgzuomlqxfgeqguuaxdjcuruapwpbzbyhauwohommusednzdmcmrydnbulqvktvutsqizewmboqedrjqtvjuayxujnswhpqchgmhmitpxltadcsyzdszbpwnfojodbqnhduvnplmagpdljcknwmqokdtaohfpzsyemwsbjecpthcdjpsibkwnqpneyswxlwczswbbcfrwmvbykvgnfcavtnatgyqtuusnsvovahtpfunppvduxdssrslzsdumambukqpkzizeeowtjzqieiavcnwutsivhkprcfbdpdkurgnbffjjpmhrbfnuywpfgfwimzlbcvvudlxisguiudzwknqkliprpnbbpoermcnpnmahvuppzrljeewronkdblgszkllozdbndjizayyrljxrfofvyiylqqlbbypcbtqeeydgwdykpvbwmhrkrpwifjljjcllxbrbcxkacikrfmqrvjemzcugnfrwidhfgbjiyvlcdvukjmeevitwmndzvwvfzfmiixsgsdixzeiksmpowkkixphumeznlovtlobetmdssldlzuzvelfddoyrvzggneabubhnnkigwntxjuvnfaskpsdkumshqsikwrzjchrawkxfesumvnymheybqqjgjtsfltqpbkpxwmfdhzrcmrowvmxleitnenurhngkzvhvjoasorwclmygywudenskdpbkchudedyqsbigufifrjmsfixlvrwagzkkhennkodcpokjvurmddgklfwixujdtvqccdqmtvqijaueultyqbidhgngawjwubywfqiaoylzafguszskcdnljarmzditeiplbzmpzxqzewvwxqgatvlevdqugapmlgymhkdgjthnqflpvtpqodujingqnvcyeamlmruvndkfivufokvcpqoxfunsrptvshhgzbcogotpknuyzqdqirnnnchguccmkluloyzunslxhgxjyazitnxgreplhrzreuessdofxacgicpgcpqyengvrvjamitscxkxabczbhgjjvrnmhlsusqnnzochhumfhjhiljlupudmlrbuctowjbkirmqziegpnnxawivneaartblywbugfeowsgxbkdqzrqapaxdfxfyrimpenlkuqbrkjoluscvluvcuufbsmalumczbnjwfmpqwfbszfnkzlpwfuxxhzkdlmcpcolhacxyhzqhgetgriewfbwobgrovwfxkqemuencfdlljetapxzubvkcdbsazyxlqeylinppqaacgwextdtuadyghtggrgsjkswufljxnlzwhetdjnzksaqztyimeavouskzfvwthyrqckvnzvzuvpvqodcufxjzrvaxrxsaxjsbvooxlorifmyvsaqxzbzrwzqpykrvvkwsalpnbivgxtcrvuouvnntpfjnpajkmfdosubtfwacretmyjjvzyooezdvcmgouldohgimdkqwqllqxwlyuzmybrudecrapwoydynikfearrqqnboidcietehzgazxzqycqlkbqqbjiuzvvpfarognspmbqoargytwjfxaxblfvldscivuybhrrvujjuartvoecngzoshjfkehuzdtcmkvigetaglvdbafoifdamohyupstslwfxtpdyiggvbkwdrlmwqokgwiblbwfoummodromxujbggeytqwjhjrdrsqurxllmzzpqpbqmnrstvsoorzvaqatlqqcpbpbarrsguishzlcvfqlwpiyiiutakxrnmtndmhkgqcqrpuoxlzvchukrqftaclnpecuqjeybjqtalhzyhvcqrpkhudhzowquykkjrllcdeeqleqsbtlukvbeykfngxhgkupdhahmeldqrtksoxmyspftzkihkrpunhxuhejormgjhsdwqswihbdjolsydisqprnyxwmokuxrndpdvmncntlbeebhotyfmnfjjsytoxkbacgvowybplftrgdhcdmqqsazmaucxggaimvykvcbjhxapaktfykvqmwemshjynjjbhhoejpnsoqioadvynqrboxnigzhtkqxrznwjclbrblhbpdcevvgmsvuzuduhvryvgwejkhcltlpiqroomucgsyfmcatxtuuasalcipqdcfnvybjmynsqlaepaanvujxokkruzhxeokzmnkalxsdisiauinseypskalebubfingwbqwonruylcyimnaqnpkyrwctsgadvhbyzynprjnclnkxcmppczpvxsqqarvvawuzwjopsdsfseeuttmxubssvjkxchtcdpbaaspuvjboqfkjaygucaozjyxlfspljrnjlefgqiwinjrnhzjjbyjlygygaorjhguskzaahziwiblpcubeumrvsrbufudocximylpfkzdudojhkmnhyecsyfmfbpudmerkpgrbiuvnkhuxvieuoimmnzsoqotfskpktjlbfjqqsknnuthjbwxoxpepfxuyjmkcvxfagvsaghoccxldvltscziiyciiqsklpsoyniyvsoyumlyjwtcztmjrqrzhlmsaeiarrbplpnfdydpxzrwsfflvyncjzxlfhoyapnlgarmbwbyvuwpzbbubozknyxuflsgagtjikxjjyjeufutixpjlqvaotuwemehuxsdkpotpyzjdtcostxdkvfaozwuocdkavnmkefzeeijamxsixyusduiftcvvgfxbvjozqndvymxmmpujnobtljyentbtabxvmlwdazaaoxnamhlcymxjxxnmsqisrfoeskhumhvcgieurpypdvycsnokewfvdtbvfkqttnvzvzumqsctocviqmvuiarovvjafbwbotalvualpehfgenwqisbkmpfjaiqeeruxsgsoggdknisryrkilltzayiaizemszmmhgbpogbbrtvpkfxwqsxsrgsbhzqzacmjkpyzvzcmuxdfcbdutammifqpggrikfruurvrqygmxjtamwuizhwhomzwsseexxbtowkgwssucmwqksalbxtplungmtklqlegkqmijhcnvafhtgtufomsizywvlhlynskdgtmpxbkyhstplpubbojdnhyaolabflgmgvddwqdfiwwvmqwphhswosweeyhljpxpkdvjtyqdvnajfyymftivlgbrfidoxcgkfdtybjbyybjeziqgbzdofeimmlbmpjwvorvrczqbcbfejxmmwqbeulqjwtvnetiumgmohepjfwnruadsqgymrrvpmsdtnnnztzoadfmjezaybfstmtifkfvyyyrnlfnhedjkivvoxxoachwqcewmjrkjrexejklppxbxuwottcuyjsolwkzhdmruqozbamspjuoescxoftmqlaejlfroriljykmawhrgdhmvmljrhvjsynclvvbmfmyfwkfttybwfpsradkhbwczlgkgbltgytlwfsrzqsvxjppmtbvuxxvjffpgskosdbpjtgilbflkvawodskbrfmxkbfemuxrvmarsketqpelrcbxulyoqklcnqgbkdtirvbkghfyzllsompkznyrzlvncboohhyyfbkljqlkdwcrkselfechqxwuakkjujizmumxmzhqxkjhenuluyskxogxbqhxbryolknylvqihzrlplwjjrvgfbfitofxhdntpataxliekzrzmqkxhffoilxebcbjioexqzyokiuuiowwegunozbwmycqddzltdimcicmrwibmexsltfzvhxhhaxmfyxzbilfqntjlcmagmstfysahskqsjdxicylkltdamomobovngougjxpbjgvslucnvqagjfhvtvkwjhlrxiyifnlovgigdnwydwgodnjykvxveineslmzaynwgycjlahqyoebdpaqnzltjyxcjkbkiriopkacnjulzandrpvgogaxfzbqjdctukklxmpkvlxvlkaebvlrbnrimsbwvfrrqdeppvblgygtliaodlggyxrkpsinxcgpfngxijirkqmvymjdzrlxockguuvuwdlcqsbbdjunbikbvuewnrwcugkqahmxkybbscevnyjoitpfpvcdmyhietzgalfkjindktzztkpcfghxblaqjjypezweldqwmgcyzbytnnvsuepxqrpzcqrgppmcsfbelddmgdfvscpohfozydydvrlngarbfsfsxkefpkcioswvzkuzqvcnoqavqswxmdpmovtffwnwomrnwomolrczhcwzwuwjynxoiqtqmhmatfprteigxkgeoednzbwxotnwjgmypyakesezwmgtyozouebthzsvuftgoiefgesmwwoukwpkmqagucabbsyyaseocivkonxnlnjxjzhxpidmmdppyqnykromblwszvfmioktptqhdutpzkhzauxkonyrbvjaqqobhywwundxjypijwklshyixwayrlakcqljrhflwlkflzqwxaisjgaieciwokiqbtbscgdztpgfpyboalgmrjuylfwbperszskbbpcwflbwldmmotyieuirzetrikjhfwkilneqagollbxbwxlastrtxkmfxwoeszmfmqyoymzlnznlwalqufmtrybowpuqogwczuqxisjyryjpyxiucuovurmrggjvnfzobqlkkwkbwtsvsarwwhsryekfktczbbnctbodzygwuztmzkjwubpsfzzrsbrvfgyyjocjnkfhjyvjkehgfwbmxaerexnlfnjpbnyqyfxjfturzbyfzztybzqfydseqcvtrvkrajbfcvyezwlaxezzepgeuzkmdffwapqczrjdoihpgssezrdfiljekuqpzxmcneeovqrlybdevviuonzyzlclfudgrrkgvrushmffpilkfwftjgrkrvyypbhjsrppimhpymwpxizcegypprcgpahgdopxfhmqtththeigojjuqjjfannpnuwqknpsubinwpggvqmjaxfsgrxjemaujwmtmclgdvwaleiivuuxszpaqojvamrjkdfwfsfjoblbhtjcpdbjdqkvevshhjssnzosstdgwqhelqibumkzcwujsnsbyktlkkgeflkectkpjuqfgdgjbduvqmxqysckekomvaqxtanfufmbktmmwijouieubifhsvtowjlrjawgijjuexiafsqbauvddclvaejyoxrzzohjzqefpmhugxxhtvmwzxuzcfzsertghbpittnjiudorbxmwkjvjfxnmwfrpzxwametiresniiglgtjsegdjfrvcyotxlqzawviqzcdjkkwsffkjoquthpxfgrfrjetfbdvdfbmqnlisqvbglvaumxbsqgmznffojcrqdggqrrijmlqzgstvpupidbhqjmgupakuitlzktkwhcxpuqkmmcupfbhoqokfovzwomxyijwpmteglrsztmpyowpemzlcumakzxkjhgyvbcbovuooifpybeeqdrsaetkfsvobdmwhqyvoujceotdsxhkbbcdfxnmqkatooqxgqswkebosutmsdwvebylynxqyzkonalvqfscjtqenmqhppetqceqsbhqcrgrttmjygnibdorreygvfblhfcbiltmczdvuqgtytdayrrqxrytwagghkhsvdezeiuzacuyvxawqrmplmkjmrpwbzqzcuygevhexbfvafrqzfikrstgjlenkuooqmwvhebhhgciovanaiztbszmffbrzpfscenlkqsrzwznrcctkbnnvoaduduvtanxgckqtfhsbjhvllovobllqlomqjhjlvgrxthsyqmzztukgliumtgeguqwdygovofuhonffzhevdrbozwdschawawcyeqvvypeocmtctaxyrapswsmybmxbkzbrrwmrmqgqcbuxdtwuuloqfargoqkzrlqiiecwukozljwpeulyharmckvrafsrqibaodyinnjbygsccdbkfuyketdeavxtfyttcubphnqfvkhxokjvgihkdkqgfnzkmudqohfvuycrimoyyawfkdrpokvvzwglrlbfsjdojhftvwuuwqbgvuvlethepnriyvqtgtjrcrkypgulyvturqfwjmcbbtjcqzxwuinxzaxogrbfowbfnidyvhzybjctkzsfifejhbyqubxkyyrngvldclefwgbggtlqapziszaobxybvsodpzjtmnzitcpbvcrvutfosfdvcdwzvmfkmoeadfjwhaacetxymfnhkscnvborntdbjhcmonlvplxtgxstehaozedwhspvntyxccjrrumghmaolshpbjfcpjyxdouqjunlxxeqttxbhxpuryjsjqwyzuvckrvtmihlhnbbgycnxthqtskcjgakbypnrkhduqqcdsfksjzscjivbtzmbzxezosrabwurnywhdizmktqtcnuxmjyoidpwxgwyfsrsrpzuyajkubdypzxdivrqahmzpkxufqowgpsgqdqmfvmuujzdgrthaiirugozycxguqomteyazkwwvwzbpskpctgxbwyzzwgtoufjbfkcrgymcznruyiwtrvunutosbjgyopbvbdoieamfqgzqqwjhtdxnylhavnylfzjgexqkyfqqnridnrnhwkwuxeustugyvphcmxomegerymxndkwbwvwtzsouputklcozzdmglsxjfuzkgvmcqiyrcmorghcrjsskxesjzsueotovrczjmxdpjrgrakklddxajqjiiemwzdtsftesqhhcyptaaeldhidqapzivnhwqapyttsmaboaqhcqnnvuxznyqoilbphuqyulrmxtnnvfxxykmthkuuimiqxlihfyfzlxllsayoivngiabpkyluktmieurmuwlgvzrobrejprrxtvodtzzduonaigmfdalyzeocxsmmmflfablvckbwyoxjvloalbamfppehdrvieblgmgiyhhxygivtwvfzvtgmikwndryisjqeradzhczpmujirqjojpbuzxhdohnjqdpkdulnykekgnszddnpsojsnsxeaknspecuznjxzoifbcehguwykfsyzrezdtusxwpwmywnmgvqizxqvtrgajgzdmbgfvzctobhozvdfqtnrsgnlxvnidmlppsukryghbnxaiafyvvqnbfyyangfasurmqcfoimsxlsgmaghvwxydvyflgknaeemugrlqfdorxwfzcoubluejskubuhbbloxuhimnnagnynmbbjcndiwyssbpzcqmsniayvpnxxawknxlybadjybeqctrhlgzyobyjsmjpmfzbenzfndqmguelnwsyetzsxzeplnfasgdytddhitvqqzbfxvgbrfwogadspkujrxhkcmtkhobxqedncjrtqpjwroqgzkpqiwckkwxrkapaeuqidhdvymrpdkvcumuekwpuumlfmahsuxdzgguevotayocscyxmwogrcswqufkrdnqlwnqtbjtbaxvcvuprixikpgckondravcyiurlgkoghkkeebypzizqpccdrfwtbaslvjxbwljfxvmczkrassqjwvonakhdnbpkmolkbwqztcbumuugonqlieaipjoekdoxrbhszzrsduprqjyfyosgssrjcfnmidlbettdunyyjnpayphxdzfyrwjvdxilcvohqimlxklgzciyspxxqcvibfdeensgjgpzqcmnoxwoagouylroppyquevarnictyemaqzoqxesesmcffsxurnqvkqozztvxxhzpiphguzkonowtitnziewvunuvgpufytwhlgnffzvvproxmdzvhxqekmbsewzcryjeeyjlxhgmywmlalijiypvmrpqpptipcntdygafppgldrnobzybovnhlewcxhtbuoesuhajygxbzmralrbcnqjauietpxvllbffkfrilqlmccoqwpsjidlclpwcmtnzwtghaxropfaujpkfgeqohbtvqpzekndgikpkjhyzmbvxqfdyjtnsvinnznujczrmlhwvqxweyrbqyeohadbxlpkkegvignurusomrkqpdrfbywkyzmxndhzjqvrwilnefcsxoioubwxbsibtwyibiikydbunojtvllscvjwyftaxdbqbczckjokoredhnydbjxfggdelwgkckbfmciynyibqmexbccenalviozwnigrsjwengcafmbxyhwblziybttlkvhxdooxxkdlrhnytpvtyrwksektagfkdmjiczfalinepackrzdqrzcjemfgsmsxybfdckdnusslswvkwycpyeaeqhkltciufqxhaawxsqimnewlcaccecgxkskfwuzdkwmnyjksbufoydbdedhkiqhukrzhozmyxznwkxolutcszdxdjfntxxphqooepdfpesloszbmvdgwjgzunonkncresikklpzpkkfclgqimwevcfprwebjivnadykqplhzvmdjuttgsadwfsobyplgkajpavfqhoreavpxojdijhfqbtscifivhtkipsawgrcjosgfblnmuseylwawdirledttvtremtpblxgoitcfmhdxfdtjnmwrqrmnmdtyxibkhhbsddxpmaosdkdswbkosweecxcbielrnojqsghgiwanidggesvyqbcsahtinhaavltpsawaywogcwniokhenjznquyfbyizlboddkgcjwklszvilcmymnmeikklkskvvzbylhcwfpjxoffchtctjoarakcmepizolzbucyztjwjodlwyorheryfddrjubkkmkliolhjvfsjiehhubqyupfauzjqawapilxyzhhumzfvfpezquaklhmhgwxjuxaclzakghgtilqocwpsqrfezrlhplqlksnvsnhywntfbjvdfkwycdedwpkocbznvnincsobfhigtdkaniarneujwfxyizldowtqqhtvqbeleoouyollviwrpwpxvdcjbxbrgvozwskdiaxgpktksqdhmsgjxluakvtrsiqrccwldtrudngydjhrdocdbwfltzeojuhlzdwewqabdibirjbwzdbczhnugsipopcpsbvqrvuwdvgwehvfkwhldvhlpqcfhfxcgsuzqovtkbsqknwwjdjnaqaridzsiwuoqongfkcpnuhxhftslchluifdlevvcrjufydkkhbxblwkqrebtmppwuuhapcegnaonfaxmewprsbhjgleuatqwoxyfbeoogedmgaykwobqrlzxwdryyhwogwujaiziocuuevhalkscvratwttvdpljlfvnpuwdxsabnheyrwdpqdimyejbtvnhciwucuzbnzfcgldyjgpzlzojdzlzwyizievmbuoquvsagxapdprqrhaugntdnbevibhjvxzpstsarsswkjpdsrxyetdrwjogkxpgxqxrmpsfkmdwxszpjynnrtgoewupwmxteukqmevwqbsnttcdrssjnbzrzvivjfoqcbgofemwfglazodsiydvbemacvylcobepkuxqivxogxpwdieblzeqogsjeflvjskvojlxginnfdlknqlarrqfykoesczbwmwmvjjcrzryecjruwrmqkrowisomurignwdyihrhasldbczzvlpfffcpasbuklczhfypppwphjuknumjhbqmhsbjncdxphwxmwodoltvwnikjutrxjfgehprluqdbmaqlotzbowyeeknadgyomeuvwniqdlsslidcbcfsafwfpjhuqfjemfzithawtsqgatkexqwyxufndohvwsbiyastksrdnilpdytdqrdnnkarykoueqeeswxcrphezvtctphjikywuzptlfprxuwqstujkeplzjquaxfiidgeevzrdpjajfsbapnltcyuloqnmvywaeafccyfrhhamcdprqamtaigpywdvuzxabecddjwktwzvcomuqanqiwhiskdojconhtskcpwxnvsplgkbgzuoxbwpmbfxeumnnfzruvphthxeojiwiclgfjxtndrtzdgmiffccumvejcuukqeodktnkpcpgvoldawkfamcmigxmcrwswmwihluwnjeixslzoxhojjdtrcftudnsrjczwxxjgctgugfkdmanxdgqiolcrzwjkakhxhsglmmhstrwgulfztwhhjlbihmviwehfwntibadvubdomiphgxpsiscsexccbjhazakadnvxqanelemtbdlmvoezlgbprkpqlbtqpqphrcmcgyvkbhwyvcxikazbkquxsnpjdeqwicyrcwbfdzdabcklcmmpciouvedbiwxryyidulizkmblonwtzkkcvayqectpariyrqdldmmnynaoawjaivedwcwcgrrgibhbtkmwwyjwnjnohyqsuuxqwvufnmlxnszhfnfbmpabaprknhchdzzaxufkishxngeswkvkbvlbkdlamphqrhsodzylrhieqpymbuwcrhfemtezklpbuhrxgpkzzvgpkedlyzpqiwuvrywelnfguxfcosdpnjexohkoiberzaotymxmzeuvdbzutcjimqhcxrqiuxbwxrpydokcsgxwhwqdazloptqpmjzjgafftwdwkpacxzafxqkxsvmjqeadpbmvbtbupgsbysdvtecqwmqqiecaicdyervhkyebhwcfricmofdmttddxfehjhhnbdxnbbpiztpsdufrzkeudjycqcjzltpmwmczprkqmblqvqjwcnrfypjotuoenftlrvlioxycylsubcqfrhksyvgrqwyfbtruqecgbdibodvshoxaxksyhbrxxrfbkyvccaifftgtwendulfrxyrebjeaajbljzplzyseryzpenuyazszxldyujzvucidbxqcxiiqjifnxbozbiyatdzqpaljevpisfksovkxfqmctcdumdviiwyxwljcgykadvsrsdqxvfbojelwjgercerapacvypxdmqxevpbsucieitctbikdmdfdfkydzvjlngpkvqcsunyeiaxkijnwnvzsfzyewhpkpewmwbeqocwwetgmcwkrrjkwikahtrtivpurqbjgffdkalwcjjuasgydqamjrftmupfnqqtwxyixmgavpwwkewnuxbfqgyfankpgdjeajmavscrkypucnjykkdbqdgsssiyxteycsyalarxairevacikhlcktucnedlzhlcalennvknfdtadvkpevtoopqcutntdyxfjbsyyeldhggkdqbhmuvcjngfjtzmtyreclcappgyvmkyelfshcxqsdybxzpsxizzvbcktikowupcfwxozuerxeuudlpdtocorgakqkboeqrlmoznifghkacpltsghxwydyjwikkocdbqtcediklunpjaichpzfpeeaaomndoqgfkjlntvapkpalxeuodzekdgkstzxjqfqcqbrjzsajhbwhfqvlqbvvkhpdhoozufbkgswhmwruzpdfgysycpvmwlrfzfevkhitagaoctiejnlrodpqskeqxvwzccwpkekmkmapgltryeimjzeblirjfpkksgzeljqxvsmddhueleswdxxrhrapgmzasaeflwdippmuxiykpthssgjzzlqgxrisrnxelanaszxrjxdyqmtiteksqaapsljlahqljdodeluniamzmhhhltcduevopebpnrdzwrcaczqmzelnlvvwozakdvyvbakptpoqgqskrixqmkezfbwwaygfthauhnlcczsjsnvjvsakdgjkjhglfpqawrxfeijiietcrplmhnymvixepfpvwivuzsbfdlnnpjpgyaufotslbrqsyhpvpnpohrvkclxtumzsptzfmtqpkgkjqzefmvwumteqeejaskuheumsndkalulbtrhimfczyirdmdffnaotwbmlgyltsyvnpevclxdjiuowxudnwsgsvufdsrwkrtahzvjkvoudikbiefvaxduuyaxqtvdkpdtqacbvqxabhclohiqgllcjnzciwfulkockqfgjcimlkxztfqbsddeqeiybnsozgsjzzrkdawpmtqiaglujrabxibyxwpwejgfjxpmzlboguwiahfmafpyorylpnitxqzipoupcyfisbtukyildyjtrhhgxpzwhyewpanrasbstupguxtavevmncsktuiauoxjpkcpdekyazevyzxudsirvddoxmptaodryfhdltcmuijsigolaxevcimbwduwrzqrhxvssxgmhpgpxvdyujvwrhzpktmdvcvcbquvpbhwsposktsecncwxbljxznsdiugaqbprknmabekwwrzltxixiuwihonrkutaviuixgibkuxinythvcgewcofsbycxrctbydyelzqhzyvxsetwkzuonbgqziosmjvnmtrzvkiuidrcjkavlwjaxrrybhsqsndghwhegpyrvrvgcwcpsnqsfjqgqjykwbqfyzjeojxlbtsfpwujjkbqtuzldxxbznjxmuddedqhwioneiwqvygqufezdbacrlbfggkmjbvfjjsqtrgormhlulkxombfyengkxuwypdkyyarpiiiwptqcdnsrqypunxfkrdlggvggxaxhifdzyuddjvvcvkwikdvbggkpbqvyqvfaakzzgecsazuxmqgwwbxchhtkarkqmrrmbsnixsczrwwdoebkfzpoikyibkbpbuedmrnllpkfnjkbnmovnfjxpkitwjiydmdrgqdthpywyjzmvnhksshkepdbylbdaexiwabfrabqlaegqnskhzumpzpplqvnwsvsuwxlyabjchruujhclbqcbhtozobviypcwmoxoriqbanvluzyxpaawwovkrsvrhxotnnjhvcivpfjjfjgwkhtgxqsrjpiqnymclvlhxveobpxgzgclnxtmqndzdmrsmduybifadlpebomaurljoewerzfwnxoacjydrfeuqvbtjnteegnvmjbgljcygraicamvfspynsrwgnamvqjiblomuqlcjnkloygvsytfqneycglxwwfyhtkdmxhvlujbspwlnqsefwchdpezmmzvfkbtjirwcaxxpukfmcltznaefgdtsdqaprvacmxemubeoljcquvpjxvqeajwfcyutuvvgscvofzftkhjgdapavigvtdbvdxrxsmemqbbwaipmpysuyjxvtdq";
-	////////////////////////////////////////////////////
+	u8 pt[LENGTH] = "nwlrbbmqbhcdarzowkkyhiddqscdxrjmowfrxsjybldbefsarcbynecdyggxxpklorellnmpapqfwkhopkmcoqhnwnkuewhsqmgbbuqcljjivswmdkqtbxixmvtrrbljptnsnfwzqfjmafadrrwsofsbcnuvqhffbsaqx";
+	//////////////////////////////////////////////////
 	//u8 *pt = malloc(sz);
 	// u8 pt[80] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 	u8 ch;
 	u64 j=0;
-	/*while ( j<sz) 
-	{
-		ch = fgetc(fp);
-		*(pt+j) = (unsigned char)ch;
-		++j;
-	}
-	fclose(fp);*/
+	
 	
 	u8 ct[LENGTH + CRYPTO_ABYTES]; //  = malloc(sz + CRYPTO_ABYTES);
 	u8 key[CRYPTO_KEYBYTES] = "keykeykeykeykey!";
-	u8 ad[128] = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
+	u8 ad[146] = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210!!";
 	u8 nonce[15] = "noncenoncenonce";
 	// u64 mlen = 80;
 	u64 clen,olen;
 	u8 out[LENGTH]; // = malloc(sz);
 	
-	FILE *resdump;
+	/*FILE *resdump;
 	resdump = fopen("Deoxys_ARM_16384","w");
 	for(j=0;j<200;++j){
-		TIME_IT("COLM_ARM",crypto_aead_encrypt(&ct,&clen,&pt,mlen,&ad,128,0x00,&nonce,&key),mlen,1);
+		TIME_IT("COLM_ARM",crypto_aead_encrypt(&ct,&clen,&pt,mlen,&ad,146,0x00,&nonce,&key),mlen,1);
 	}
-	fclose(resdump);
+	fclose(resdump);*/
 	// printf("sz is %lu\n",sz);
 	
-	// crypto_aead_encrypt(&ct,&clen,&pt,mlen,&ad,144,0x00,&nonce,&key);
+	crypto_aead_encrypt(&ct,&clen,&pt,mlen,&ad,146,0x00,&nonce,&key);
 	// printf("Entering decrypt\n");
-	int ver = crypto_aead_decrypt(&out,&olen,0x00,&ct,clen,&ad,128,&nonce,&key);
+	int ver = crypto_aead_decrypt(&out,&olen,0x00,&ct,clen,&ad,146,&nonce,&key);
        
 
 	// printf("Lenght of the cipher is %d, length of the output is %d\n",clen,olen);
@@ -991,8 +1558,8 @@ int main(){
 	}
 	else{
 		printf("Verification fails\n");
-		/* for(i=0;i<olen/16;++i){for(j=0;j<16;++j){
-			printf("%d ",ct[i*16+j]); }printf("\n");
+		for(i=0;i<160;++i){
+			printf("%c",ct[i]); 
 		} // */
 	} 
 	printf("\n"); 

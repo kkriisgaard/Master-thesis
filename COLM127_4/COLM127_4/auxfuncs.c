@@ -9,13 +9,13 @@
 {
 	unsigned char *val = (unsigned char*) &p; // Line taken from http://stackoverflow.com/questions/13257166/print-a-m128i-variable (top answer)
 	printf("%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c \n", val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7], val[8], val[9], val[10], val[11], val[12], val[13], val[14], val[15], val[16]); 
-}
+}*/
 
 void print128_asint(__m128i p) // Print 128-bit block as integer
 {
 	unsigned char *val = (unsigned char*) &p; 
 	printf("%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d \n", val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7], val[8], val[9], val[10], val[11], val[12], val[13], val[14], val[15], val[16]); 
-}*/
+}
 
 __m128i mul2(__m128i x)
 {

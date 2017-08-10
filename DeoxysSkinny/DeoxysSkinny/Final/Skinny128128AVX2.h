@@ -1,8 +1,6 @@
 /*
 Constants, parameters and intrinsics used for the implementation of 
 Skinny128/128.
-
-Code based on https://github.com/kste/skinny_avx
 */
 
 #ifndef SKINNY128128AVX2_H

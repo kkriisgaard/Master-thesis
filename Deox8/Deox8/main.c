@@ -59,7 +59,7 @@ int main(int argc,char *argv[])
 	unsigned long long mlen;
 	int ch;
 	FILE *fp;
-	fp = fopen("infile128.txt","r");
+	fp = fopen("simple-165.txt","r");
 	if(fp==NULL){printf("Couldn't open file. Terminating\n");return 0;}
 	fseek(fp, 0L, SEEK_END);
 	sz = ftell(fp);
@@ -81,27 +81,27 @@ int main(int argc,char *argv[])
 	unsigned long long ml;
 	unsigned char ad[128] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 	const unsigned char nonce[CRYPTO_NPUBBYTES] = {0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0xE2, 0x02, 0x04, 0x08, 0x10,  0x40, 0x80, 0xE2}; // */
-	FILE *resdump;
+	/*FILE *resdump;
    	resdump = fopen("Deoxys-Skylake-1000-128.txt","w");
 	for(j=0;j<1000;++j)
 	{
 		TIME_IT("Deoxys-init",crypto_aead_encrypt( ct,&clen,pt,mlen,ad,128,0x0,nonce,key),mlen, 1 );
 	}
-    	fclose(resdump);
+    	fclose(resdump);*/
+    	crypto_aead_encrypt( ct,&clen,pt,mlen,ad,128,0x0,nonce,key);
 	
-	// crypto_aead_encrypt( ct,&clen,pt,mlen,ad,128,0x0,nonce,key);
 	FILE *out;
-	// printf("clen = %d\n",clen);
 	out = fopen("outfile.txt","w");
 	for(j=0;j<clen;++j)
 	{
 		fprintf(out,"%c",ct[j]);
 	}
 	// printf("\nDecrypting now, clen = %d\n",clen); // oi
+	// printf("Entering decrypt\n");
 	int dec_status = crypto_aead_decrypt( dec,&ml,0x0,ct,clen,ad,128,nonce,key);
 	// printf("ml = %d\n",ml);
 	// printf("I should be printing the ciphertext now\n");
-	if(!dec_status){for(j=0;j<ml;++j)
+	if(!dec_status || 1){for(j=0;j<ml;++j)
 	{
 		printf("%c",dec[j]);
 	} printf("\n");}

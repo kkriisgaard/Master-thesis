@@ -4,13 +4,6 @@ Implementation of Skinny128/128 with AVX2.
 This code verifies the test vectors for Skinny and can
 also be used to run benchmarks.
 */
-
-/*
-Skinny implementation
-
-Code based on https://github.com/kste/skinny_avx
-*/
-
 #include "stdio.h"
 #include "stdlib.h"
 #include <string.h>

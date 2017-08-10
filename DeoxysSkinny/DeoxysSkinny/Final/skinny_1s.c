@@ -2,10 +2,6 @@
  * Date: 11 December 2015
  * Contact: Thomas Peyrin - thomas.peyrin@gmail.com
  */
- 
- /*
- Code based on https://github.com/kste/skinny_avx
- */
 
 #include <stdio.h>
 #include <stdlib.h>

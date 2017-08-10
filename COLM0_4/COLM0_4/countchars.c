@@ -1,5 +1,7 @@
 #include <stdio.h>
 
+/* Infile character counter. Unused, but used in early testing*/
+
 int main(int argc,char *argv[])
 {
 	if(argc<2)

@@ -6,7 +6,7 @@
 #include "auxfuncs.h"
 #include <stdbool.h>
 #include "macros.kkr"
-// #include "debugfuncs.h"
+#include "debugfuncs.h"
 
 __m128i enc_keys[11];
 
@@ -35,120 +35,6 @@ void generate_enc_key(__m128i key)
 	kt = _mm_aeskeygenassist_si128(enc_keys[9], 0x36);
 	enc_keys[10] = key_exp_assist(enc_keys[9],kt);
 }
-
-/* void encrypt_8block(__m128i* in, __m128i* out) // This function was fucking tedious to write.
-{
-	// __m128i* tmp = malloc(8*sizeof(__m128i));
-	
-	out[0] = _mm_xor_si128(in[0],keys[0]);
-	out[1] = _mm_xor_si128(in[1],keys[0]);
-	out[2] = _mm_xor_si128(in[2],keys[0]);
-	out[3] = _mm_xor_si128(in[3],keys[0]);
-	out[4] = _mm_xor_si128(in[4],keys[0]);
-	out[5] = _mm_xor_si128(in[5],keys[0]);
-	out[6] = _mm_xor_si128(in[6],keys[0]);
-	out[7] = _mm_xor_si128(in[7],keys[0]);
-	// print128_asint(out[1]);
-
-	out[0] = _mm_aesenc_si128(out[0],keys[1]);
-	out[1] = _mm_aesenc_si128(out[1],keys[1]);
-	out[2] = _mm_aesenc_si128(out[2],keys[1]);
-	out[3] = _mm_aesenc_si128(out[3],keys[1]);
-	out[4] = _mm_aesenc_si128(out[4],keys[1]);
-	out[5] = _mm_aesenc_si128(out[5],keys[1]);
-	out[6] = _mm_aesenc_si128(out[6],keys[1]);
-	out[7] = _mm_aesenc_si128(out[7],keys[1]);
-	// print128_asint(out[1]);
-	
-	out[0] = _mm_aesenc_si128(out[0],keys[2]);
-	out[1] = _mm_aesenc_si128(out[1],keys[2]);
-	out[2] = _mm_aesenc_si128(out[2],keys[2]);
-	out[3] = _mm_aesenc_si128(out[3],keys[2]);
-	out[4] = _mm_aesenc_si128(out[4],keys[2]);
-	out[5] = _mm_aesenc_si128(out[5],keys[2]);
-	out[6] = _mm_aesenc_si128(out[6],keys[2]);
-	out[7] = _mm_aesenc_si128(out[7],keys[2]);
-	// print128_asint(out[1]);
-	
-	out[0] = _mm_aesenc_si128(out[0],keys[3]);
-	out[1] = _mm_aesenc_si128(out[1],keys[3]);
-	out[2] = _mm_aesenc_si128(out[2],keys[3]);
-	out[3] = _mm_aesenc_si128(out[3],keys[3]);
-	out[4] = _mm_aesenc_si128(out[4],keys[3]);
-	out[5] = _mm_aesenc_si128(out[5],keys[3]);
-	out[6] = _mm_aesenc_si128(out[6],keys[3]);
-	out[7] = _mm_aesenc_si128(out[7],keys[3]);
-	// print128_asint(out[1]);
-
-	out[0] = _mm_aesenc_si128(out[0],keys[4]);
-	out[1] = _mm_aesenc_si128(out[1],keys[4]);
-	out[2] = _mm_aesenc_si128(out[2],keys[4]);
-	out[3] = _mm_aesenc_si128(out[3],keys[4]);
-	out[4] = _mm_aesenc_si128(out[4],keys[4]);
-	out[5] = _mm_aesenc_si128(out[5],keys[4]);
-	out[6] = _mm_aesenc_si128(out[6],keys[4]);
-	out[7] = _mm_aesenc_si128(out[7],keys[4]);
-	// print128_asint(out[1]);
-	
-	out[0] = _mm_aesenc_si128(out[0],keys[5]);
-	out[1] = _mm_aesenc_si128(out[1],keys[5]);
-	out[2] = _mm_aesenc_si128(out[2],keys[5]);
-	out[3] = _mm_aesenc_si128(out[3],keys[5]);
-	out[4] = _mm_aesenc_si128(out[4],keys[5]);
-	out[5] = _mm_aesenc_si128(out[5],keys[5]);
-	out[6] = _mm_aesenc_si128(out[6],keys[5]);
-	out[7] = _mm_aesenc_si128(out[7],keys[5]);
-	// print128_asint(out[1]);
-	
-	out[0] = _mm_aesenc_si128(out[0],keys[6]);
-	out[1] = _mm_aesenc_si128(out[1],keys[6]);
-	out[2] = _mm_aesenc_si128(out[2],keys[6]);
-	out[3] = _mm_aesenc_si128(out[3],keys[6]);
-	out[4] = _mm_aesenc_si128(out[4],keys[6]);
-	out[5] = _mm_aesenc_si128(out[5],keys[6]);
-	out[6] = _mm_aesenc_si128(out[6],keys[6]);
-	out[7] = _mm_aesenc_si128(out[7],keys[6]);
-	// print128_asint(out[1]);
-
-	out[0] = _mm_aesenc_si128(out[0],keys[7]);
-	out[1] = _mm_aesenc_si128(out[1],keys[7]);
-	out[2] = _mm_aesenc_si128(out[2],keys[7]);
-	out[3] = _mm_aesenc_si128(out[3],keys[7]);
-	out[4] = _mm_aesenc_si128(out[4],keys[7]);
-	out[5] = _mm_aesenc_si128(out[5],keys[7]);
-	out[6] = _mm_aesenc_si128(out[6],keys[7]);
-	out[7] = _mm_aesenc_si128(out[7],keys[7]);
-	// print128_asint(out[1]);
-	
-	out[0] = _mm_aesenc_si128(out[0],keys[8]);
-	out[1] = _mm_aesenc_si128(out[1],keys[8]);
-	out[2] = _mm_aesenc_si128(out[2],keys[8]);
-	out[3] = _mm_aesenc_si128(out[3],keys[8]);
-	out[4] = _mm_aesenc_si128(out[4],keys[8]);
-	out[5] = _mm_aesenc_si128(out[5],keys[8]);
-	out[6] = _mm_aesenc_si128(out[6],keys[8]);
-	out[7] = _mm_aesenc_si128(out[7],keys[8]);
-	// print128_asint(out[1]);
-	
-	out[0] = _mm_aesenc_si128(out[0],keys[9]);
-	out[1] = _mm_aesenc_si128(out[1],keys[9]);
-	out[2] = _mm_aesenc_si128(out[2],keys[9]);
-	out[3] = _mm_aesenc_si128(out[3],keys[9]);
-	out[4] = _mm_aesenc_si128(out[4],keys[9]);
-	out[5] = _mm_aesenc_si128(out[5],keys[9]);
-	out[6] = _mm_aesenc_si128(out[6],keys[9]);
-	out[7] = _mm_aesenc_si128(out[7],keys[9]);
-	// print128_asint(out[1]);
-
-	out[0] = _mm_aesenclast_si128(out[0],keys[10]);
-	out[1] = _mm_aesenclast_si128(out[1],keys[10]);
-	out[2] = _mm_aesenclast_si128(out[2],keys[10]);
-	out[3] = _mm_aesenclast_si128(out[3],keys[10]);
-	out[4] = _mm_aesenclast_si128(out[4],keys[10]);
-	out[5] = _mm_aesenclast_si128(out[5],keys[10]);
-	out[6] = _mm_aesenclast_si128(out[6],keys[10]);
-	out[7] = _mm_aesenclast_si128(out[7],keys[10]);
-} // */
 
 void encrypt_4block(__m128i* in) // This function was fucking tedious to write.
 {	
@@ -360,6 +246,7 @@ int crypto_aead_encrypt(
 	// printf("Address of key is: %llu\n",k);
 	generate_enc_key(key);
 	// printf("Address of key is: %llu\n",k);
+	
 	int fin_mes = mlen%CRYPTO_KEYBYTES; 
 	int numblocks_mes =  mlen/CRYPTO_KEYBYTES; // if |M*[l]| < 128, numblocks_ad = l-1. Otherwise, numblocks_ad = l
 	int fin_ad =  adlen%CRYPTO_KEYBYTES;  
@@ -380,10 +267,23 @@ int crypto_aead_encrypt(
 	
 	__m128i nonceparam = _mm_set_epi64(nonce,param); 
 	Wp = encrypt_block( _mm_xor_si128( nonceparam,L1 )); 
-	int upper = numblocks_ad-1; 
+	int upper = numblocks_ad;
+	
+	if(!fin_ad){
+		--upper;
+	}
+	
+	int sin =1;
+	int fin_encr=upper%PARA;
+	if(!fin_encr){
+		sin=0;
+	}
+	
+	
 	unsigned char Aa[CRYPTO_KEYBYTES]; 
 	unsigned long long i,j;
-	for(i=0;i<upper;i+=PARA) 
+	
+	for(i=0;i<upper-(PARA*sin);i+=PARA) 
 	{
 		// delta = mul2(delta);
 		
@@ -410,8 +310,16 @@ int crypto_aead_encrypt(
 		
 		// Wp ^= a_Ai[0];
 		
-		Wp = Wp^a_Ai[0]^a_Ai[1]^a_Ai[2]^a_Ai[3]; // ^a_Ai[4]^a_Ai[5]^a_Ai[6]^a_Ai[7];// _mm_xor_si128( Z,Wp );		
+		Wp = Wp^a_Ai[0]^a_Ai[1]^a_Ai[2]^a_Ai[3]; 	
 	}
+	for(i=0;i<fin_encr;++i){
+		a_Delta[PARA-1] = mul2(a_Delta[PARA-1]);
+		a_Ai[0] = _mm_loadu_si128(ad+(i+upper-fin_encr)*CRYPTO_KEYBYTES);
+		a_Ai[0] = _mm_xor_si128(a_Ai[0],a_Delta[PARA-1]);
+		a_Ai[0] = encrypt_block(a_Ai[0]);
+		Wp = Wp^a_Ai[0];
+	}
+	
 	if(fin_ad)
 	{
 		memcpy(Aa, ad+(numblocks_ad*CRYPTO_KEYBYTES), fin_ad); 
@@ -419,20 +327,22 @@ int crypto_aead_encrypt(
 		memset(Aa+fin_ad+1,0,CRYPTO_KEYBYTES-(fin_ad+1));
 		++numblocks_ad;
 		Ai = _mm_loadu_si128(Aa); 
-		_2delta = mul2(a_Delta[PARA-1]); // mul2(delta);
-		delta =  _mm_xor_si128( _mm_xor_si128(delta /*a_Delta[PARA-1]*/ ,_2delta) , mul2(_2delta) );
+		
+		_2delta = mul2(a_Delta[PARA-1]); 
+		delta =  _mm_xor_si128( _mm_xor_si128(a_Delta[PARA-1] ,_2delta) , mul2(_2delta) );
 	}
 	else
 	{
 		Ai = _mm_loadu_si128(ad+upper*CRYPTO_KEYBYTES); 
-		delta = mul2(a_Delta[PARA-1]); //  mul2(delta);
+		delta = mul2(a_Delta[PARA-1]); 
 	}
 	AA = _mm_xor_si128( Ai,delta );
 	Z = encrypt_block(AA);
 	IV = _mm_xor_si128( Z,Wp );
-	// print128_asint(IV);
+	print128_asint(IV);
 	// Encryption
 	unsigned char M_star[CRYPTO_KEYBYTES]; 
+	
 	int mf = numblocks_mes-1; // l-1
 	if(fin_mes)
 	{
@@ -440,6 +350,7 @@ int crypto_aead_encrypt(
 		M_star[fin_mes] = 0x80;
 		memset(M_star+fin_mes+1,0,CRYPTO_KEYBYTES-(fin_mes+1));
 		++numblocks_mes;
+		++mf;
 	}
 	else
 	{
@@ -458,9 +369,19 @@ int crypto_aead_encrypt(
 	a_Delta[PARA-1] = L; /*COLM is one-indexed by nature...*/
 	__m128i a_DeltaC[PARA];
 	a_DeltaC[PARA-1] = L2; 
-	__m128i mes[PARA]/*, a_W[16]*/;
-	for(i=0;i<mf;i+=PARA)
+	__m128i mes[PARA];
+	
+		
+	sin =1;
+	fin_encr=mf%PARA;
+	if(!fin_encr){
+		sin=0;
+	}
+	printf("mf = %d\n",mf);
+	
+	for(i=0;i<mf-(PARA*sin);i+=PARA)
 	{
+		
 			a_Delta[0] = mul2(a_Delta[PARA-1]);
 			a_Delta[1] = mul2(a_Delta[0]);
 			a_Delta[2] = mul2(a_Delta[1]);
@@ -512,6 +433,26 @@ int crypto_aead_encrypt(
 			_mm_storeu_si128( (__m128i *)&c[(i+3)*CRYPTO_KEYBYTES], mes[3] ); 
 			
 	}
+	
+	for(i=0;i<fin_encr;++i){
+		a_Delta[PARA-1] = mul2(a_Delta[PARA-1]);
+		mes[0] = _mm_loadu_si128(m+((i+mf-fin_encr)*CRYPTO_KEYBYTES));
+		Ml = mes[0]^Ml;
+		Mg[0] = _mm_xor_si128(mes[0],a_Delta[PARA-1]);
+		Mg[0] = encrypt_block(Mg[0]);
+		Wp = _mm_xor_si128(Mg[0],mul2(W));
+		Mg[0] = _mm_xor_si128(Wp,W);
+		W = Wp;
+		Mg[0] = encrypt_block(Mg[0]);
+		
+		a_DeltaC[PARA-1] = mul2(a_DeltaC[PARA-1]);
+		print128_asint(mes[0]);
+		mes[0] = _mm_xor_si128(Mg[0],a_DeltaC[PARA-1]);
+		
+		
+		_mm_storeu_si128( (__m128i *)&c[(i+mf-fin_encr)*CRYPTO_KEYBYTES], mes[0] );
+	}
+	
 	delta = a_Delta[PARA-1]; //[0]
 	_2delta = mul2(delta);  
 	delta = _mm_xor_si128(_mm_xor_si128(delta ,_2delta),mul2(_2delta));
@@ -538,7 +479,8 @@ int crypto_aead_encrypt(
 	
 	C = _mm_xor_si128(CC,deltaC);
 	
-	_mm_storeu_si128( (__m128i *)&c[mf*CRYPTO_KEYBYTES], C ); 
+	printf("After the loop: %d\n",(mf)*CRYPTO_KEYBYTES); 
+	_mm_storeu_si128( (__m128i *)&c[(mf)*CRYPTO_KEYBYTES], C ); 
 	
 	delta = mul2(delta);
 	deltaC = mul2(deltaC);
@@ -554,6 +496,7 @@ int crypto_aead_encrypt(
 	
 	_mm_storeu_si128( (__m128i *)&c_fin[0], C ); 
 	*clen = mlen + CRYPTO_ABYTES;
+	printf("nbm = %d\n",numblocks_mes);
 	memcpy(c+numblocks_mes*CRYPTO_KEYBYTES,c_fin,fin_mes);
 	return 0;
 }
