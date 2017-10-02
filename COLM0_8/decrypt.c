@@ -46,7 +46,6 @@ void generate_dec_key(__m128i key)
 
 void decrypt_8block2(__m128i* in) 
 {
-	// __m128i* tmp = malloc(8*sizeof(__m128i));
 	
 	in[0] = _mm_xor_si128(in[0],dec_keys[10]);
 	in[1] = _mm_xor_si128(in[1],dec_keys[10]);

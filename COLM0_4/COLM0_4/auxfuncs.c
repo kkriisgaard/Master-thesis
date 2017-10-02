@@ -30,8 +30,6 @@ __m128i mul2(__m128i x)
 	return _mm_xor_si128(x2,_mm_and_si128(red,mask));
 }
 
-// __m128i keys[20];
-
 __m128i key_exp_assist(__m128i t1, __m128i t2)
 {
 	__m128i t3 = _mm_slli_si128(t1,0x04);

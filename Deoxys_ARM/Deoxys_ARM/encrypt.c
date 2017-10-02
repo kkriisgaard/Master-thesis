@@ -4,7 +4,7 @@
 #include "wmmintrin.h"
 #include "tmmintrin.h"
 #include "crypto_aead.h"
-#include "debugfuncs.h" /*Alright compiler? Shut the fuck up*/
+#include "debugfuncs.h" 
 
 /* #define ENCR_8_BLOCKS(message) \
 			tmp = _mm_xor_si128(keys[0],tweaks[0]); \

@@ -28,8 +28,6 @@ bool check_pad(__m128i ver, __m128i M_star,int fin)
 {
 	unsigned char c_arr[CRYPTO_KEYBYTES];
 	unsigned char M_arr[CRYPTO_KEYBYTES];
-	/*print128_asint(ver);
-	print128_asint(M_star);*/
 	_mm_storeu_si128( (__m128i *)&c_arr[0], ver );
 	_mm_storeu_si128( (__m128i *)&M_arr[0], M_star );
 	if(M_arr[fin] != 0x80)

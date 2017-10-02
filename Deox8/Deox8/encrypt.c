@@ -129,7 +129,7 @@ int crypto_aead_encrypt(
 		tmp = _mm_xor_si128(keys[0],tweaks[0]);
 		
 		mes[0] = _mm_xor_si128(mes[0],tmp);
-		mes[1] = _mm_xor_si128(mes[1],_mm_xor_si128(tmp,z_s[0][0]) ); // index 1..7 // Trying with "add" rather than xor
+		mes[1] = _mm_xor_si128(mes[1],_mm_xor_si128(tmp,z_s[0][0]) ); 
 		mes[2] = _mm_xor_si128(mes[2],_mm_xor_si128(tmp,z_s[0][1]) );  
 		mes[3] = _mm_xor_si128(mes[3],_mm_xor_si128(tmp,z_s[0][2]) );
 		mes[4] = _mm_xor_si128(mes[4],_mm_xor_si128(tmp,z_s[0][3]) );

@@ -427,7 +427,7 @@ for(j = 0; j < 48; j++) {
     }
 
 	
-	tk2[7] = XOR(tmp[0],tmp[2]);  // Reverse order
+	tk2[7] = XOR(tmp[0],tmp[2]); 
 	tk2[6] = tmp[7];
 	tk2[5] = tmp[6];
 	tk2[4] = tmp[5];

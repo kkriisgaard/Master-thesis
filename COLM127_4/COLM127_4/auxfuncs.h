@@ -12,7 +12,7 @@ void print128_asint(__m128i p); // */
 
 // Constants - I'd really prefer that I could just leave these in.
 
-__m128i mul2(__m128i x); // Small scale, deserves testing
+__m128i mul2(__m128i x); 
 
 //keys
 
