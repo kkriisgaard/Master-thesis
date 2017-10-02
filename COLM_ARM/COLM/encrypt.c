@@ -5,7 +5,6 @@
 #include "crypto_aead.h"
 #include "auxfuncs.h"
 #include <stdbool.h>
-// #include "debugfuncs.h"
 
 __m128i enc_keys[11];
 
